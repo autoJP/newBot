@@ -18,8 +18,7 @@
           "string": [
             {
               "name": "product_type_id",
-              "value": "=6"
-
+              "value": "={{ $json.product_type_id }}"
             }
           ]
         },
@@ -86,6 +85,20 @@
       ],
       "id": "4c48ade9-718e-405b-89c1-1beab80ed6e0",
       "name": "Code in Python (Beta)"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "item = $json\nraw = item.get('product_type_id')\n\ntry:\n    product_type_id = int(raw)\nexcept Exception:\n    raise Exception(f'product_type_id is missing or invalid: {raw}')\n\nif product_type_id <= 0:\n    raise Exception(f'product_type_id must be > 0, got: {raw}')\n\nreturn [{\n    'json': {\n        **item,\n        'product_type_id': product_type_id\n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        0
+      ],
+      "id": "c-validate-product-type-id",
+      "name": "Validate Product Type ID"
     }
   ],
   "pinData": {},
@@ -105,7 +118,7 @@
       "main": [
         [
           {
-            "node": "Execute Command",
+            "node": "Validate Product Type ID",
             "type": "main",
             "index": 0
           }
@@ -139,6 +152,17 @@
         [
           {
             "node": "Execute Command1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Product Type ID": {
+      "main": [
+        [
+          {
+            "node": "Execute Command",
             "type": "main",
             "index": 0
           }

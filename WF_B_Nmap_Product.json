@@ -18,7 +18,7 @@
           "string": [
             {
               "name": "product_id",
-              "value": "=319"
+              "value": "={{ $json.product_id }}"
             }
           ]
         },
@@ -217,6 +217,20 @@
       ],
       "id": "9f23de74-3102-4e61-a464-349374c3d69f",
       "name": "Update Tags (Success)"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "item = $json\nraw = item.get('product_id')\n\ntry:\n    product_id = int(raw)\nexcept Exception:\n    raise Exception(f'product_id is missing or invalid: {raw}')\n\nif product_id <= 0:\n    raise Exception(f'product_id must be > 0, got: {raw}')\n\nreturn [{\n    'json': {\n        **item,\n        'product_id': product_id\n    }\n}]"
+      },
+      "name": "Validate Product ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        272
+      ],
+      "id": "b-validate-product-id"
     }
   ],
   "pinData": {},
@@ -236,7 +250,7 @@
       "main": [
         [
           {
-            "node": "Get Product from Dojo",
+            "node": "Validate Product ID",
             "type": "main",
             "index": 0
           }
@@ -313,6 +327,17 @@
     "Update Tags (Success)": {
       "main": [
         []
+      ]
+    },
+    "Validate Product ID": {
+      "main": [
+        [
+          {
+            "node": "Get Product from Dojo",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
