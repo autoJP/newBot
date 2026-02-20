@@ -19,14 +19,7 @@
             {
               "name": "product_type_id",
               "value": "=6"
-            },
-            {
-              "name": "acunetix_base_url",
-              "value": "={{ $env.ACUNETIX_BASE_URL || 'https://localhost:3443' }}"
-            },
-            {
-              "name": "acunetix_api_key",
-              "value": "={{ $env.ACUNETIX_API_TOKEN }}"
+
             }
           ]
         },
@@ -56,7 +49,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-base-url {{ $('Set Parameters').item.json.acunetix_base_url }} \\\n  --acu-api-token {{ $('Set Parameters').item.json.acunetix_api_key }}\n "
+        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-base-url {{$env.ACUNETIX_BASE_URL}} \\\n  --acu-api-token {{$env.ACUNETIX_API_TOKEN}}\n "
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -69,7 +62,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/acunetix_set_group_scan_speed.py \\\n  --acu-base-url {{ $('Set Parameters').item.json.acunetix_base_url }} \\\n  --acu-api-token {{ $('Set Parameters').item.json.acunetix_api_key }} \\\n  --group-id {{ $json.group_id }} \\\n  --scan-speed sequential\n"
+        "command": "=python3 /opt/tools/acunetix_set_group_scan_speed.py \\\n  --acu-base-url {{$env.ACUNETIX_BASE_URL}} \\\n  --acu-api-token {{$env.ACUNETIX_API_TOKEN}} \\\n  --group-id {{ $json.group_id }} \\\n  --scan-speed sequential\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
