@@ -107,7 +107,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/import-scan/' }}",
+        "url": "={{ $env.DOJO_BASE_URL.replace(/\\/+$/,'') + '/import-scan/' }}",
         "authentication": "genericCredentialType",
         "genericAuthType": "httpHeaderAuth",
         "sendBody": true,
@@ -184,7 +184,7 @@
           "parameter": [
             {
               "name": "tags",
-              "value": "[\"needs:nmap\",\"nmap:failed\"]"
+              "value": "={{ JSON.stringify(Array.from(new Set([...( $('Get Product from Dojo').item.json.tags || []), 'nmap:failed']))) }}"
             }
           ]
         }
@@ -207,7 +207,7 @@
     {
       "parameters": {
         "executeOnce": false,
-        "command": "=DOJO_BASE_URL=\"{{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}}\" \\\nDOJO_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/dojo_set_internet.py \\\n  --product-id {{$json[\"product_id\"]}} \\\n  --xml /tmp/nmap_{{$json[\"product_id\"]}}.xml\n"
+        "command": "=DOJO_BASE_URL=\"{{$env.DOJO_BASE_URL}}\" \\\nDOJO_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/dojo_set_internet.py \\\n  --product-id {{$json[\"product_id\"]}} \\\n  --xml /tmp/nmap_{{$json[\"product_id\"]}}.xml\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
