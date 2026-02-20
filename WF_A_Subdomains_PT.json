@@ -60,10 +60,11 @@
     },
     {
       "parameters": {
-        "functionCode": "// Extract and normalize domain\nconst input = $node[\"Set Parameters\"].json;\nconst pt = $json;\n\nconst ptIdStr = input.product_type_id;\nconst ptId = Number(ptIdStr);\n\nif (!ptId || Number.isNaN(ptId)) {\n  throw new Error('product_type_id is missing or invalid: ' + ptIdStr);\n}\n\nlet domain = input.domain || '';\nif (!domain && pt && pt.name) {\n  domain = pt.name;\n}\n\nif (!domain) {\n  throw new Error('Could not determine domain for Product Type ' + ptId);\n}\n\n// normalize: strip scheme, path, port, lowercase\ndomain = domain.trim();\n// remove protocol\ndomain = domain.replace(/^https?:\\/\\//i, '');\n// cut path\ndomain = domain.split('/')[0];\n// cut port\ndomain = domain.split(':')[0];\n\ndomain = domain.toLowerCase();\n\nif (!domain) {\n  throw new Error('Domain normalization produced empty value for Product Type ' + ptId);\n}\n\nreturn [\n  {\n    json: {\n      product_type_id: ptId,\n      domain,\n      product_type: pt\n    }\n  }\n];"
+        "language": "python",
+        "pythonCode": "import re\n\ninput_data = $node['Set Parameters'].json\npt = $json\n\npt_id_str = input_data.get('product_type_id')\ntry:\n    pt_id = int(pt_id_str)\nexcept Exception:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_str}')\n\nif not pt_id:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_str}')\n\ndomain = input_data.get('domain') or ''\nif not domain and isinstance(pt, dict):\n    domain = pt.get('name') or ''\n\nif not domain:\n    raise Exception(f'Could not determine domain for Product Type {pt_id}')\n\n# normalize: strip scheme, path, port, lowercase\ndomain = domain.strip()\ndomain = re.sub(r'^https?://', '', domain, flags=re.IGNORECASE)\ndomain = domain.split('/')[0]\ndomain = domain.split(':')[0]\ndomain = domain.lower()\n\nif not domain:\n    raise Exception(f'Domain normalization produced empty value for Product Type {pt_id}')\n\nreturn [{\n    'json': {\n        'product_type_id': pt_id,\n        'domain': domain,\n        'product_type': pt\n    }\n}]"
       },
       "name": "Extract Domain",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
         -608,
@@ -106,10 +107,11 @@
     },
     {
       "parameters": {
-        "functionCode": "// Parse subdomain enumeration results\nlet result;\ntry {\n  result = JSON.parse($json.stdout || '{}');\n} catch (e) {\n  throw new Error('Failed to parse JSON from enum_subs_auto.py: ' + e.message);\n}\n\nlet subs = result.subs || [];\nif (!Array.isArray(subs)) {\n  throw new Error('Invalid subdomains format from script');\n}\n\nconst hosts = subs\n  .map(s => {\n    if (typeof s === 'string') return s;\n    if (s && typeof s === 'object' && s.host) return s.host;\n    return null;\n  })\n  .filter(s => s && typeof s === 'string');\n\nreturn [{\n  json: {\n    product_type_id: $node[\"Extract Domain\"].json.product_type_id,\n    domain: $node[\"Extract Domain\"].json.domain,\n    subdomains: hosts,\n    raw_result: result\n  }\n}];"
+        "language": "python",
+        "pythonCode": "import json\n\nstdout = $json.get('stdout') or '{}'\ntry:\n    result = json.loads(stdout)\nexcept Exception as e:\n    raise Exception(f'Failed to parse JSON from enum_subs_auto.py: {e}')\n\nsubs = result.get('subs') or []\nif not isinstance(subs, list):\n    raise Exception('Invalid subdomains format from script')\n\nhosts = []\nfor item in subs:\n    if isinstance(item, str) and item:\n        hosts.append(item)\n    elif isinstance(item, dict) and item.get('host') and isinstance(item.get('host'), str):\n        hosts.append(item.get('host'))\n\nextract = $node['Extract Domain'].json\nreturn [{\n    'json': {\n        'product_type_id': extract.get('product_type_id'),\n        'domain': extract.get('domain'),\n        'subdomains': hosts,\n        'raw_result': result\n    }\n}]"
       },
       "name": "Parse Results",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
         0,
@@ -140,10 +142,11 @@
     },
     {
       "parameters": {
-        "functionCode": "// Decide which hosts need new Products\nconst parsed = $node[\"Parse Results\"].json;\nconst ptId = parsed.product_type_id;\nconst domain = parsed.domain;\nconst subs = parsed.subdomains || [];\n\nconst resp = $json || {};\nconst results = Array.isArray(resp.results) ? resp.results : [];\nconst existingNames = new Set(results.map(p => p.name));\n\nconst hostsToCreate = [];\n\nfor (const h of subs) {\n  if (!existingNames.has(h)) {\n    hostsToCreate.push(h);\n  }\n}\n\n// If no subdomains found at all, create root Product for domain if it doesn't exist\nif (subs.length === 0 && !existingNames.has(domain)) {\n  hostsToCreate.push(domain);\n}\n\nreturn hostsToCreate.map(host => ({\n  json: {\n    product_type_id: ptId,\n    domain,\n    host\n  }\n}));"
+        "language": "python",
+        "pythonCode": "parsed = $node['Parse Results'].json\npt_id = parsed.get('product_type_id')\ndomain = parsed.get('domain')\nsubs = parsed.get('subdomains') or []\n\nresp = $json or {}\nresults = resp.get('results') if isinstance(resp, dict) else []\nif not isinstance(results, list):\n    results = []\n\nexisting_names = set()\nfor product in results:\n    if isinstance(product, dict) and product.get('name'):\n        existing_names.add(product.get('name'))\n\nhosts_to_create = []\nfor host in subs:\n    if isinstance(host, str) and host and host not in existing_names:\n        hosts_to_create.append(host)\n\n# If no subdomains found at all, create root Product for domain if it doesn't exist\nif len(subs) == 0 and domain and domain not in existing_names:\n    hosts_to_create.append(domain)\n\nreturn [{\n    'json': {\n        'product_type_id': pt_id,\n        'domain': domain,\n        'host': host\n    }\n} for host in hosts_to_create]"
       },
       "name": "Prepare Create List",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
         400,
@@ -197,10 +200,11 @@
     },
     {
       "parameters": {
-        "functionCode": "// Simple final summary based on parsed results\nconst parsed = $node[\"Parse Results\"].json;\nconst subs = parsed.subdomains || [];\n\nreturn [{\n  json: {\n    product_type_id: parsed.product_type_id,\n    domain: parsed.domain,\n    total_subdomains_found: subs.length,\n    timestamp: new Date().toISOString()\n  }\n}];"
+        "language": "python",
+        "pythonCode": "from datetime import datetime, timezone\n\nparsed = $node['Parse Results'].json\nsubs = parsed.get('subdomains') or []\n\nreturn [{\n    'json': {\n        'product_type_id': parsed.get('product_type_id'),\n        'domain': parsed.get('domain'),\n        'total_subdomains_found': len(subs),\n        'timestamp': datetime.now(timezone.utc).isoformat()\n    }\n}]"
       },
       "name": "Generate Final Report",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
         400,
@@ -210,10 +214,11 @@
     },
     {
       "parameters": {
-        "functionCode": "// Handle script failure explicitly\nthrow new Error('Subdomain enumeration failed with exit code ' + $json.exitCode + ': ' + ($json.stderr || ''));"
+        "language": "python",
+        "pythonCode": "exit_code = $json.get('exitCode')\nstderr = $json.get('stderr') or ''\nraise Exception(f'Subdomain enumeration failed with exit code {exit_code}: {stderr}')"
       },
       "name": "Handle Script Error",
-      "type": "n8n-nodes-base.function",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 1,
       "position": [
         0,
