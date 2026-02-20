@@ -7,21 +7,28 @@
       "name": "Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [-980, 180]
+      "position": [
+        -980,
+        180
+      ]
     },
     {
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/system_settings/' }}",
         "options": {
-          "ignoreHttpStatusErrors": true
+          "ignoreHttpStatusErrors": true,
+          "fullResponse": true
         }
       },
       "id": "h-dojo",
       "name": "Check Dojo",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-760, 180],
+      "position": [
+        -760,
+        180
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "mGl4PbJkKfeJbTg8",
@@ -36,43 +43,54 @@
           "parameter": [
             {
               "name": "X-Auth",
-              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+              "value": "={{ $env.ACUNETIX_API_TOKEN || '' }}"
             }
           ]
         },
         "options": {
-          "ignoreHttpStatusErrors": true
+          "ignoreHttpStatusErrors": true,
+          "fullResponse": true
         }
       },
       "id": "h-acu",
       "name": "Check Acunetix Node",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-540, 180]
+      "position": [
+        -540,
+        180
+      ]
     },
     {
       "parameters": {
         "url": "={{ ($env.N8N_BASE_URL || 'http://localhost:5678').replace(/\\/+$/,'') + '/healthz' }}",
         "options": {
-          "ignoreHttpStatusErrors": true
+          "ignoreHttpStatusErrors": true,
+          "fullResponse": true
         }
       },
       "id": "h-n8n",
       "name": "Check n8n",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-320, 180]
+      "position": [
+        -320,
+        180
+      ]
     },
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "dojo_ok = bool($node['Check Dojo'].json)\nacu_ok = bool($node['Check Acunetix Node'].json)\nn8n_ok = bool($node['Check n8n'].json)\n\ncritical = []\nif not dojo_ok:\n    critical.append('dojo_unavailable')\nif not acu_ok:\n    critical.append('acunetix_unavailable')\nif not n8n_ok:\n    critical.append('n8n_unavailable')\n\nreturn [{\n  'json': {\n    'dojo': {'ok': dojo_ok},\n    'acunetix': {'ok': acu_ok},\n    'n8n': {'ok': n8n_ok},\n    'critical': critical,\n    'has_critical': len(critical) > 0\n  }\n}]"
+        "pythonCode": "from datetime import datetime, timezone\n\nnow = datetime.now(timezone.utc).isoformat()\n\nservices = [\n    ('dojo', 'Check Dojo', [(200, 299)]),\n    ('acunetix', 'Check Acunetix Node', [(200, 299)]),\n    ('n8n', 'Check n8n', [(200, 299)]),\n]\n\ndef status_in_ranges(status_code, ranges):\n    if status_code is None:\n        return False\n    for low, high in ranges:\n        if low <= status_code <= high:\n            return True\n    return False\n\nreport = {}\ncritical = []\n\nfor service_name, node_name, expected_ranges in services:\n    node_data = $node[node_name].json if $node[node_name].json else {}\n    status_code = node_data.get('statusCode')\n    ok = status_in_ranges(status_code, expected_ranges)\n\n    error_message = None\n    if status_code is None:\n        error_message = 'no_status_code_returned'\n    elif not ok:\n        error_message = f'unexpected_status_code:{status_code}'\n\n    report[service_name] = {\n        'ok': ok,\n        'status_code': status_code,\n        'error_message': error_message,\n        'checked_at': now,\n    }\n\n    if not ok:\n        critical.append(f'{service_name}_unavailable')\n\nreturn [{\n  'json': {\n    **report,\n    'critical': critical,\n    'has_critical': len(critical) > 0,\n    'checked_at': now,\n  }\n}]"
       },
       "id": "h-report",
       "name": "Build Unified Report (Python)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-100, 180]
+      "position": [
+        -100,
+        180
+      ]
     },
     {
       "parameters": {
@@ -88,7 +106,10 @@
       "name": "Critical issues?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [120, 180]
+      "position": [
+        120,
+        180
+      ]
     },
     {
       "parameters": {
@@ -102,18 +123,77 @@
       "name": "Send Critical Alert",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [340, 100]
+      "position": [
+        340,
+        100
+      ]
     }
   ],
   "connections": {
-    "Trigger": {"main": [[{"node": "Check Dojo", "type": "main", "index": 0}]]},
-    "Check Dojo": {"main": [[{"node": "Check Acunetix Node", "type": "main", "index": 0}]]},
-    "Check Acunetix Node": {"main": [[{"node": "Check n8n", "type": "main", "index": 0}]]},
-    "Check n8n": {"main": [[{"node": "Build Unified Report (Python)", "type": "main", "index": 0}]]},
-    "Build Unified Report (Python)": {"main": [[{"node": "Critical issues?", "type": "main", "index": 0}]]},
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Check Dojo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Dojo": {
+      "main": [
+        [
+          {
+            "node": "Check Acunetix Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Acunetix Node": {
+      "main": [
+        [
+          {
+            "node": "Check n8n",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check n8n": {
+      "main": [
+        [
+          {
+            "node": "Build Unified Report (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Unified Report (Python)": {
+      "main": [
+        [
+          {
+            "node": "Critical issues?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Critical issues?": {
       "main": [
-        [{"node": "Send Critical Alert", "type": "main", "index": 0}],
+        [
+          {
+            "node": "Send Critical Alert",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     }
