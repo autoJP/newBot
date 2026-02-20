@@ -18,7 +18,7 @@
           "string": [
             {
               "name": "product_type_id",
-              "value": "=6"
+              "value": "={{ $json.product_type_id }}"
             },
             {
               "name": "domain",

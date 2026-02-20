@@ -36,7 +36,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "pt_candidates = []\nnmap_candidates = []\nfor p in ($json.get('results') or []):\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n\n    has_products = bool(p.get('id'))\n    needs_nmap = 'needs:nmap' in tags\n    nmap_done = ('nmap:done' in tags) or ('nmap:completed' in tags)\n    targets_ready = 'targets:ready' in tags\n    active_scan = 'acunetix:active' in tags\n\n    if has_products and needs_nmap:\n        nmap_candidates.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name')\n        })\n\n    if nmap_done:\n        pt_candidates.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'targets_ready': targets_ready,\n            'active_scan': active_scan\n        })\n\n# PT без Products -> если нет ни одного продукта, запускаем WF_A\nrun_subdomains = len($json.get('results') or []) == 0\nrun_targets = any(x['product_id'] for x in pt_candidates)\nrun_acunetix = any(x['targets_ready'] and not x['active_scan'] for x in pt_candidates)\n\nreturn [{\n  'json': {\n    'run_subdomains': run_subdomains,\n    'run_nmap': len(nmap_candidates) > 0,\n    'run_targets': run_targets,\n    'run_acunetix': run_acunetix,\n    'nmap_candidates': nmap_candidates,\n    'pt_candidates': pt_candidates\n  }\n}]"
+        "pythonCode": "trigger_input = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\ntrigger_product_type_id = trigger_input.get('product_type_id')\n\npt_candidates = []\nnmap_candidates = []\nfor p in ($json.get('results') or []):\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n\n    has_products = bool(p.get('id'))\n    needs_nmap = 'needs:nmap' in tags\n    nmap_done = ('nmap:done' in tags) or ('nmap:completed' in tags)\n    targets_ready = 'targets:ready' in tags\n    active_scan = 'acunetix:active' in tags\n\n    if has_products and needs_nmap:\n        nmap_candidates.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'product_type_id': p.get('prod_type')\n        })\n\n    if nmap_done:\n        pt_candidates.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'product_type_id': p.get('prod_type'),\n            'targets_ready': targets_ready,\n            'active_scan': active_scan\n        })\n\nrun_subdomains = len($json.get('results') or []) == 0\nrun_targets = any(x['product_type_id'] for x in pt_candidates)\nrun_acunetix = any(x['targets_ready'] and not x['active_scan'] for x in pt_candidates)\n\nnmap_item = nmap_candidates[0] if nmap_candidates else {}\npt_item = next((x for x in pt_candidates if x.get('product_type_id')), {})\n\nreturn [{\n  'json': {\n    'run_subdomains': run_subdomains,\n    'run_nmap': len(nmap_candidates) > 0,\n    'run_targets': run_targets,\n    'run_acunetix': run_acunetix,\n    'nmap_candidates': nmap_candidates,\n    'pt_candidates': pt_candidates,\n    'product_id': nmap_item.get('product_id'),\n    'product_type_id': pt_item.get('product_type_id') or trigger_product_type_id\n  }\n}]"
       },
       "id": "m-plan",
       "name": "Build Plan (Python)",
@@ -78,7 +78,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1,
       "position": [
-        -560,
+        -460,
         20
       ],
       "continueOnFail": false
@@ -114,7 +114,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1,
       "position": [
-        -140,
+        -40,
         20
       ],
       "continueOnFail": false
@@ -150,7 +150,7 @@
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1,
       "position": [
-        260,
+        360,
         20
       ],
       "continueOnFail": false
@@ -190,6 +190,72 @@
         20
       ],
       "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "product_type_id",
+              "value": "={{ $json.product_type_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "m-set-a-input",
+      "name": "Set WF_A Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "product_id",
+              "value": "={{ $json.product_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "m-set-b-input",
+      "name": "Set WF_B Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "product_type_id",
+              "value": "={{ $json.product_type_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "m-set-c-input",
+      "name": "Set WF_C Input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        160,
+        20
+      ]
     }
   ],
   "connections": {
@@ -230,7 +296,7 @@
       "main": [
         [
           {
-            "node": "Run WF_A_Subdomains_PT",
+            "node": "Set WF_A Input",
             "type": "main",
             "index": 0
           }
@@ -259,7 +325,7 @@
       "main": [
         [
           {
-            "node": "Run WF_B_Nmap_Product",
+            "node": "Set WF_B Input",
             "type": "main",
             "index": 0
           }
@@ -288,7 +354,7 @@
       "main": [
         [
           {
-            "node": "Run WF_C_Targets_For_PT",
+            "node": "Set WF_C Input",
             "type": "main",
             "index": 0
           }
@@ -323,6 +389,39 @@
           }
         ],
         []
+      ]
+    },
+    "Set WF_A Input": {
+      "main": [
+        [
+          {
+            "node": "Run WF_A_Subdomains_PT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set WF_B Input": {
+      "main": [
+        [
+          {
+            "node": "Run WF_B_Nmap_Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set WF_C Input": {
+      "main": [
+        [
+          {
+            "node": "Run WF_C_Targets_For_PT",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
