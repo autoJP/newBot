@@ -22,11 +22,11 @@
             },
             {
               "name": "acunetix_base_url",
-              "value": "https://192.168.68.101:3443"
+              "value": "={{ $env.ACUNETIX_BASE_URL || 'https://localhost:3443' }}"
             },
             {
               "name": "acunetix_api_key",
-              "value": "1986ad8c0a5b3df4d7028d5f3c06e936ce0cbf064ad584e25a069a48d713da4ee"
+              "value": "={{ $env.ACUNETIX_API_TOKEN }}"
             }
           ]
         },
@@ -43,7 +43,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/process_nmap_ips_for_pt.py \\\n  --product-type-id {{$json[\"product_type_id\"].toString()}} \\\n  --xml-dir /tmp \\\n  --api-token 8772f6e093f7a9e5eee8241b393131a5ae6e7260"
+        "command": "=DOJO_API_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/process_nmap_ips_for_pt.py \\\n  --product-type-id {{$json[\"product_type_id\"].toString()}} \\\n  --xml-dir /tmp \\\n  --api-token \"$DOJO_API_TOKEN\""
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -56,7 +56,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token 8772f6e093f7a9e5eee8241b393131a5ae6e7260 \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-base-url {{ $('Set Parameters').item.json.acunetix_base_url }} \\\n  --acu-api-token {{ $('Set Parameters').item.json.acunetix_api_key }}\n "
+        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-base-url {{ $('Set Parameters').item.json.acunetix_base_url }} \\\n  --acu-api-token {{ $('Set Parameters').item.json.acunetix_api_key }}\n "
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
