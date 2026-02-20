@@ -1,0 +1,126 @@
+{
+  "name": "WF_E_System_Health",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "h-trigger",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [-980, 180]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/system_settings/' }}",
+        "options": {
+          "ignoreHttpStatusErrors": true
+        }
+      },
+      "id": "h-dojo",
+      "name": "Check Dojo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-760, 180],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/me' }}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {
+          "ignoreHttpStatusErrors": true
+        }
+      },
+      "id": "h-acu",
+      "name": "Check Acunetix Node",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-540, 180]
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.N8N_BASE_URL || 'http://localhost:5678').replace(/\\/+$/,'') + '/healthz' }}",
+        "options": {
+          "ignoreHttpStatusErrors": true
+        }
+      },
+      "id": "h-n8n",
+      "name": "Check n8n",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-320, 180]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "dojo_ok = bool($node['Check Dojo'].json)\nacu_ok = bool($node['Check Acunetix Node'].json)\nn8n_ok = bool($node['Check n8n'].json)\n\ncritical = []\nif not dojo_ok:\n    critical.append('dojo_unavailable')\nif not acu_ok:\n    critical.append('acunetix_unavailable')\nif not n8n_ok:\n    critical.append('n8n_unavailable')\n\nreturn [{\n  'json': {\n    'dojo': {'ok': dojo_ok},\n    'acunetix': {'ok': acu_ok},\n    'n8n': {'ok': n8n_ok},\n    'critical': critical,\n    'has_critical': len(critical) > 0\n  }\n}]"
+      },
+      "id": "h-report",
+      "name": "Build Unified Report (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-100, 180]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.has_critical }}"
+            }
+          ]
+        }
+      },
+      "id": "h-if",
+      "name": "Critical issues?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [120, 180]
+    },
+    {
+      "parameters": {
+        "url": "={{ $env.HEALTH_ALERT_WEBHOOK || '' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "h-alert",
+      "name": "Send Critical Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [340, 100]
+    }
+  ],
+  "connections": {
+    "Trigger": {"main": [[{"node": "Check Dojo", "type": "main", "index": 0}]]},
+    "Check Dojo": {"main": [[{"node": "Check Acunetix Node", "type": "main", "index": 0}]]},
+    "Check Acunetix Node": {"main": [[{"node": "Check n8n", "type": "main", "index": 0}]]},
+    "Check n8n": {"main": [[{"node": "Build Unified Report (Python)", "type": "main", "index": 0}]]},
+    "Build Unified Report (Python)": {"main": [[{"node": "Critical issues?", "type": "main", "index": 0}]]},
+    "Critical issues?": {
+      "main": [
+        [{"node": "Send Critical Alert", "type": "main", "index": 0}],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

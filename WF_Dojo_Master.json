@@ -1,0 +1,334 @@
+{
+  "name": "WF_Dojo_Master",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "m-trigger",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1400,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/?limit=1000' }}",
+        "options": {}
+      },
+      "id": "m-get-products",
+      "name": "Get Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -1180,
+        100
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "pt_candidates = []\nnmap_candidates = []\nfor p in ($json.get('results') or []):\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n\n    has_products = bool(p.get('id'))\n    needs_nmap = 'needs:nmap' in tags\n    nmap_done = ('nmap:done' in tags) or ('nmap:completed' in tags)\n    targets_ready = 'targets:ready' in tags\n    active_scan = 'acunetix:active' in tags\n\n    if has_products and needs_nmap:\n        nmap_candidates.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name')\n        })\n\n    if nmap_done:\n        pt_candidates.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'targets_ready': targets_ready,\n            'active_scan': active_scan\n        })\n\n# PT без Products -> если нет ни одного продукта, запускаем WF_A\nrun_subdomains = len($json.get('results') or []) == 0\nrun_targets = any(x['product_id'] for x in pt_candidates)\nrun_acunetix = any(x['targets_ready'] and not x['active_scan'] for x in pt_candidates)\n\nreturn [{\n  'json': {\n    'run_subdomains': run_subdomains,\n    'run_nmap': len(nmap_candidates) > 0,\n    'run_targets': run_targets,\n    'run_acunetix': run_acunetix,\n    'nmap_candidates': nmap_candidates,\n    'pt_candidates': pt_candidates\n  }\n}]"
+      },
+      "id": "m-plan",
+      "name": "Build Plan (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -950,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.run_subdomains }}"
+            }
+          ]
+        }
+      },
+      "id": "m-if-subdomains",
+      "name": "Need WF_A_Subdomains_PT?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF_A_Subdomains_PT",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "m-run-a",
+      "name": "Run WF_A_Subdomains_PT",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        20
+      ],
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.run_nmap }}"
+            }
+          ]
+        }
+      },
+      "id": "m-if-nmap",
+      "name": "Need WF_B_Nmap_Product?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF_B_Nmap_Product",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "m-run-b",
+      "name": "Run WF_B_Nmap_Product",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        -140,
+        20
+      ],
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.run_targets }}"
+            }
+          ]
+        }
+      },
+      "id": "m-if-targets",
+      "name": "Need WF_C_Targets_For_PT?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        60,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF_C_Targets_For_PT",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "m-run-c",
+      "name": "Run WF_C_Targets_For_PT",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        260,
+        20
+      ],
+      "continueOnFail": false
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.run_acunetix }}"
+            }
+          ]
+        }
+      },
+      "id": "m-if-acu",
+      "name": "Need WF_D_PT_AcunetixScan?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        460,
+        100
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF_D_PT_AcunetixScan",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "m-run-d",
+      "name": "Run WF_D_PT_AcunetixScan",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        670,
+        20
+      ],
+      "continueOnFail": false
+    }
+  ],
+  "connections": {
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Products": {
+      "main": [
+        [
+          {
+            "node": "Build Plan (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Plan (Python)": {
+      "main": [
+        [
+          {
+            "node": "Need WF_A_Subdomains_PT?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need WF_A_Subdomains_PT?": {
+      "main": [
+        [
+          {
+            "node": "Run WF_A_Subdomains_PT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Need WF_B_Nmap_Product?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF_A_Subdomains_PT": {
+      "main": [
+        [
+          {
+            "node": "Need WF_B_Nmap_Product?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need WF_B_Nmap_Product?": {
+      "main": [
+        [
+          {
+            "node": "Run WF_B_Nmap_Product",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Need WF_C_Targets_For_PT?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF_B_Nmap_Product": {
+      "main": [
+        [
+          {
+            "node": "Need WF_C_Targets_For_PT?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need WF_C_Targets_For_PT?": {
+      "main": [
+        [
+          {
+            "node": "Run WF_C_Targets_For_PT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Need WF_D_PT_AcunetixScan?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Run WF_C_Targets_For_PT": {
+      "main": [
+        [
+          {
+            "node": "Need WF_D_PT_AcunetixScan?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Need WF_D_PT_AcunetixScan?": {
+      "main": [
+        [
+          {
+            "node": "Run WF_D_PT_AcunetixScan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}

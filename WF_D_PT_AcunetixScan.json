@@ -1,0 +1,124 @@
+{
+  "name": "WF_D_PT_AcunetixScan",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "d-trigger",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [-1180, 160]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/?tags=targets:ready&limit=1000' }}",
+        "options": {}
+      },
+      "id": "d-products",
+      "name": "Get PT Targets/Products",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-980, 160],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/scans?l=100' }}",
+        "options": {
+          "ignoreHttpStatusErrors": false
+        },
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "d-acu-scans",
+      "name": "Get Active Acunetix Scans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-760, 160]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "products = ($node['Get PT Targets/Products'].json.get('results') or [])\nscans_resp = $json\nactive = 0\nfor s in scans_resp.get('scans', []) or []:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        active += 1\n\ncapacity = max(0, 5 - active)\n\neligible = []\nfor p in products:\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n    if 'targets:ready' in tags and 'acunetix:active' not in tags:\n        eligible.append({\n          'product_id': p.get('id'),\n          'product_name': p.get('name')\n        })\n\nselected = eligible[:capacity]\nreturn [{\n  'json': {\n    'active_scans': active,\n    'scan_limit': 5,\n    'available_slots': capacity,\n    'dispatch_count': len(selected),\n    'dispatch_items': selected\n  }\n}]"
+      },
+      "id": "d-plan",
+      "name": "Build Dispatch Plan (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-540, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{ $json.dispatch_count }}",
+              "operation": "larger",
+              "value2": 0
+            }
+          ]
+        }
+      },
+      "id": "d-if",
+      "name": "Has capacity and products?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [-340, 160]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "out = []\nfor row in $json.get('dispatch_items', []):\n    out.append({'json': row})\nreturn out"
+      },
+      "id": "d-expand",
+      "name": "Expand Dispatch Items",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-120, 80]
+    },
+    {
+      "parameters": {
+        "workflowId": "WF_D_ProductScan",
+        "options": {
+          "waitForSubWorkflow": true
+        }
+      },
+      "id": "d-run-product",
+      "name": "Run WF_D_ProductScan",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [100, 80],
+      "continueOnFail": false
+    }
+  ],
+  "connections": {
+    "Trigger": {"main": [[{"node": "Get PT Targets/Products", "type": "main", "index": 0}]]},
+    "Get PT Targets/Products": {"main": [[{"node": "Get Active Acunetix Scans", "type": "main", "index": 0}]]},
+    "Get Active Acunetix Scans": {"main": [[{"node": "Build Dispatch Plan (Python)", "type": "main", "index": 0}]]},
+    "Build Dispatch Plan (Python)": {"main": [[{"node": "Has capacity and products?", "type": "main", "index": 0}]]},
+    "Has capacity and products?": {
+      "main": [
+        [{"node": "Expand Dispatch Items", "type": "main", "index": 0}],
+        []
+      ]
+    },
+    "Expand Dispatch Items": {"main": [[{"node": "Run WF_D_ProductScan", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
