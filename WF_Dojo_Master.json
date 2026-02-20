@@ -57,7 +57,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "from collections import defaultdict\n\ntrigger_input = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\ntrigger_product_type_id = trigger_input.get('product_type_id')\n\ntry:\n    trigger_product_type_id = int(trigger_product_type_id) if trigger_product_type_id is not None else None\nexcept Exception:\n    trigger_product_type_id = None\n\nproducts_resp = $node['Get Products'].json if isinstance($node['Get Products'].json, dict) else {}\nproduct_types_resp = $node['Get Product Types'].json if isinstance($node['Get Product Types'].json, dict) else {}\n\nproducts = products_resp.get('results') or []\nproduct_types = product_types_resp.get('results') or []\n\nif not isinstance(products, list):\n    products = []\nif not isinstance(product_types, list):\n    product_types = []\n\ndef as_tag_set(raw_tags):\n    if isinstance(raw_tags, list):\n        return set(str(t) for t in raw_tags)\n    if raw_tags is None:\n        return set()\n    return {str(raw_tags)}\n\npt_by_id = {}\nfor pt in product_types:\n    if not isinstance(pt, dict):\n        continue\n    pt_id = pt.get('id')\n    try:\n        pt_id = int(pt_id)\n    except Exception:\n        continue\n    pt_by_id[pt_id] = pt\n\nproducts_by_pt = defaultdict(list)\nfor p in products:\n    if not isinstance(p, dict):\n        continue\n    pt_id = p.get('prod_type')\n    try:\n        pt_id = int(pt_id)\n    except Exception:\n        continue\n    products_by_pt[pt_id].append(p)\n    if pt_id not in pt_by_id:\n        pt_by_id[pt_id] = {'id': pt_id, 'name': f'PT #{pt_id}', 'tags': []}\n\nall_pt_ids = sorted(pt_by_id.keys())\nif trigger_product_type_id is not None:\n    all_pt_ids = [pt_id for pt_id in all_pt_ids if pt_id == trigger_product_type_id]\n\nqueue_wf_a_subdomains_pt = []\nqueue_wf_b_nmap_product = []\nqueue_wf_c_targets_for_pt = []\nqueue_wf_d_pt_acunetixscan = []\n\nfor pt_id in all_pt_ids:\n    pt = pt_by_id.get(pt_id) or {}\n    pt_tags = as_tag_set(pt.get('tags'))\n    pt_products = products_by_pt.get(pt_id, [])\n\n    normalized_products = []\n    for p in sorted(pt_products, key=lambda x: int(x.get('id') or 0)):\n        product_id = p.get('id')\n        try:\n            product_id = int(product_id)\n        except Exception:\n            continue\n\n        tags = as_tag_set(p.get('tags'))\n        needs_nmap = 'needs:nmap' in tags\n        nmap_done = ('nmap:done' in tags) or ('nmap:completed' in tags)\n        targets_ready = 'targets:ready' in tags\n        active_scan = 'acunetix:active' in tags\n\n        norm = {\n            'product_id': product_id,\n            'product_name': p.get('name'),\n            'product_type_id': pt_id,\n            'needs_nmap': needs_nmap,\n            'nmap_done': nmap_done,\n            'targets_ready': targets_ready,\n            'active_scan': active_scan,\n        }\n        normalized_products.append(norm)\n\n        if needs_nmap and not nmap_done:\n            queue_wf_b_nmap_product.append({\n                'product_id': product_id,\n                'product_name': p.get('name'),\n                'product_type_id': pt_id,\n            })\n\n    if len(normalized_products) == 0:\n        queue_wf_a_subdomains_pt.append({\n            'product_type_id': pt_id,\n            'product_type_name': pt.get('name'),\n        })\n        continue\n\n    needs_nmap_products = [p for p in normalized_products if p['needs_nmap']]\n    nmap_completed_for_all_needed = all(p['nmap_done'] for p in needs_nmap_products)\n\n    if nmap_completed_for_all_needed:\n        queue_wf_c_targets_for_pt.append({\n            'product_type_id': pt_id,\n            'product_type_name': pt.get('name'),\n        })\n\n    pt_targets_ready = ('targets:ready' in pt_tags) or any(p['targets_ready'] for p in normalized_products)\n    pt_has_active_scan = ('acunetix:active' in pt_tags) or any(p['active_scan'] for p in normalized_products)\n\n    if pt_targets_ready and not pt_has_active_scan:\n        queue_wf_d_pt_acunetixscan.append({\n            'product_type_id': pt_id,\n            'product_type_name': pt.get('name'),\n        })\n\nselected_a = queue_wf_a_subdomains_pt[0] if queue_wf_a_subdomains_pt else {}\nselected_b = queue_wf_b_nmap_product[0] if queue_wf_b_nmap_product else {}\nselected_c = queue_wf_c_targets_for_pt[0] if queue_wf_c_targets_for_pt else {}\nselected_d = queue_wf_d_pt_acunetixscan[0] if queue_wf_d_pt_acunetixscan else {}\n\nreturn [{\n    'json': {\n        'run_subdomains': len(queue_wf_a_subdomains_pt) > 0,\n        'run_nmap': len(queue_wf_b_nmap_product) > 0,\n        'run_targets': len(queue_wf_c_targets_for_pt) > 0,\n        'run_acunetix': len(queue_wf_d_pt_acunetixscan) > 0,\n        'queue_wf_a_subdomains_pt': queue_wf_a_subdomains_pt,\n        'queue_wf_b_nmap_product': queue_wf_b_nmap_product,\n        'queue_wf_c_targets_for_pt': queue_wf_c_targets_for_pt,\n        'queue_wf_d_pt_acunetixscan': queue_wf_d_pt_acunetixscan,\n        'products_grouped_by_prod_type': {str(k): v for k, v in products_by_pt.items()},\n        'product_type_id': selected_a.get('product_type_id') or selected_c.get('product_type_id') or selected_d.get('product_type_id') or trigger_product_type_id,\n        'product_id': selected_b.get('product_id'),\n        'selected_for_wf_a': selected_a,\n        'selected_for_wf_b': selected_b,\n        'selected_for_wf_c': selected_c,\n        'selected_for_wf_d': selected_d,\n    }\n}]"
+        "pythonCode": "from collections import defaultdict\n\ntrigger_input = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\ntrigger_product_type_id = trigger_input.get('product_type_id')\ntrigger_domain = trigger_input.get('domain')\n\ntry:\n    trigger_product_type_id = int(trigger_product_type_id) if trigger_product_type_id is not None else None\nexcept Exception:\n    trigger_product_type_id = None\n\nproducts_resp = $node['Get Products'].json if isinstance($node['Get Products'].json, dict) else {}\nproduct_types_resp = $node['Get Product Types'].json if isinstance($node['Get Product Types'].json, dict) else {}\n\nproducts = products_resp.get('results') or []\nproduct_types = product_types_resp.get('results') or []\n\nif not isinstance(products, list):\n    products = []\nif not isinstance(product_types, list):\n    product_types = []\n\ndef as_tag_set(raw_tags):\n    if isinstance(raw_tags, list):\n        return set(str(t) for t in raw_tags)\n    if raw_tags is None:\n        return set()\n    return {str(raw_tags)}\n\npt_by_id = {}\nfor pt in product_types:\n    if not isinstance(pt, dict):\n        continue\n    pt_id = pt.get('id')\n    try:\n        pt_id = int(pt_id)\n    except Exception:\n        continue\n    pt_by_id[pt_id] = pt\n\nproducts_by_pt = defaultdict(list)\nfor p in products:\n    if not isinstance(p, dict):\n        continue\n    pt_id = p.get('prod_type')\n    try:\n        pt_id = int(pt_id)\n    except Exception:\n        continue\n    products_by_pt[pt_id].append(p)\n    if pt_id not in pt_by_id:\n        pt_by_id[pt_id] = {'id': pt_id, 'name': f'PT #{pt_id}', 'tags': []}\n\nall_pt_ids = sorted(pt_by_id.keys())\nif trigger_product_type_id is not None:\n    all_pt_ids = [pt_id for pt_id in all_pt_ids if pt_id == trigger_product_type_id]\n\nqueue_wf_a_subdomains_pt = []\nqueue_wf_b_nmap_product = []\nqueue_wf_c_targets_for_pt = []\nqueue_wf_d_pt_acunetixscan = []\n\nfor pt_id in all_pt_ids:\n    pt = pt_by_id.get(pt_id) or {}\n    pt_tags = as_tag_set(pt.get('tags'))\n    pt_products = products_by_pt.get(pt_id, [])\n\n    normalized_products = []\n    for p in sorted(pt_products, key=lambda x: int(x.get('id') or 0)):\n        product_id = p.get('id')\n        try:\n            product_id = int(product_id)\n        except Exception:\n            continue\n\n        tags = as_tag_set(p.get('tags'))\n        needs_nmap = 'needs:nmap' in tags\n        nmap_done = ('nmap:done' in tags) or ('nmap:completed' in tags)\n        targets_ready = 'targets:ready' in tags\n        active_scan = 'acunetix:active' in tags\n\n        norm = {\n            'product_id': product_id,\n            'product_name': p.get('name'),\n            'product_type_id': pt_id,\n            'needs_nmap': needs_nmap,\n            'nmap_done': nmap_done,\n            'targets_ready': targets_ready,\n            'active_scan': active_scan,\n        }\n        normalized_products.append(norm)\n\n        if needs_nmap and not nmap_done:\n            queue_wf_b_nmap_product.append({\n                'product_id': product_id,\n                'product_name': p.get('name'),\n                'product_type_id': pt_id,\n                'domain': trigger_domain,\n            })\n\n    if len(normalized_products) == 0:\n        queue_wf_a_subdomains_pt.append({\n            'product_type_id': pt_id,\n            'product_type_name': pt.get('name'),\n            'domain': trigger_domain,\n        })\n        continue\n\n    needs_nmap_products = [p for p in normalized_products if p['needs_nmap']]\n    nmap_completed_for_all_needed = all(p['nmap_done'] for p in needs_nmap_products)\n\n    if nmap_completed_for_all_needed:\n        queue_wf_c_targets_for_pt.append({\n            'product_type_id': pt_id,\n            'product_type_name': pt.get('name'),\n            'domain': trigger_domain,\n        })\n\n    pt_targets_ready = ('targets:ready' in pt_tags) or any(p['targets_ready'] for p in normalized_products)\n    pt_has_active_scan = ('acunetix:active' in pt_tags) or any(p['active_scan'] for p in normalized_products)\n\n    if pt_targets_ready and not pt_has_active_scan:\n        queue_wf_d_pt_acunetixscan.append({\n            'product_type_id': pt_id,\n            'product_type_name': pt.get('name'),\n            'domain': trigger_domain,\n        })\n\nreturn [{\n    'json': {\n        'run_subdomains': len(queue_wf_a_subdomains_pt) > 0,\n        'run_nmap': len(queue_wf_b_nmap_product) > 0,\n        'run_targets': len(queue_wf_c_targets_for_pt) > 0,\n        'run_acunetix': len(queue_wf_d_pt_acunetixscan) > 0,\n        'queue_wf_a_subdomains_pt': queue_wf_a_subdomains_pt,\n        'queue_wf_b_nmap_product': queue_wf_b_nmap_product,\n        'queue_wf_c_targets_for_pt': queue_wf_c_targets_for_pt,\n        'queue_wf_d_pt_acunetixscan': queue_wf_d_pt_acunetixscan,\n        'products_grouped_by_prod_type': {str(k): v for k, v in products_by_pt.items()},\n        'trigger_product_type_id': trigger_product_type_id,\n        'trigger_domain': trigger_domain,\n    }\n}]"
       },
       "id": "m-plan",
       "name": "Build Plan (Python)",
@@ -214,20 +214,12 @@
     },
     {
       "parameters": {
-        "keepOnlySet": true,
-        "values": {
-          "string": [
-            {
-              "name": "product_type_id",
-              "value": "={{ $json.selected_for_wf_a.product_type_id || $json.product_type_id }}"
-            }
-          ]
-        },
-        "options": {}
+        "language": "python",
+        "pythonCode": "out = []\nfor row in $json.get('queue_wf_a_subdomains_pt', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
-      "id": "m-set-a-input",
-      "name": "Set WF_A Input",
-      "type": "n8n-nodes-base.set",
+      "id": "m-expand-a",
+      "name": "Expand WF_A Candidates (Python)",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         -660,
@@ -236,20 +228,12 @@
     },
     {
       "parameters": {
-        "keepOnlySet": true,
-        "values": {
-          "string": [
-            {
-              "name": "product_id",
-              "value": "={{ $json.selected_for_wf_b.product_id || $json.product_id }}"
-            }
-          ]
-        },
-        "options": {}
+        "language": "python",
+        "pythonCode": "out = []\nfor row in $json.get('queue_wf_b_nmap_product', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_id'] = row.get('product_id')\n    item['product_name'] = row.get('product_name')\n    item['product_type_id'] = row.get('product_type_id')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
-      "id": "m-set-b-input",
-      "name": "Set WF_B Input",
-      "type": "n8n-nodes-base.set",
+      "id": "m-expand-b",
+      "name": "Expand WF_B Candidates (Python)",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         -240,
@@ -258,23 +242,29 @@
     },
     {
       "parameters": {
-        "keepOnlySet": true,
-        "values": {
-          "string": [
-            {
-              "name": "product_type_id",
-              "value": "={{ $json.selected_for_wf_c.product_type_id || $json.product_type_id }}"
-            }
-          ]
-        },
-        "options": {}
+        "language": "python",
+        "pythonCode": "out = []\nfor row in $json.get('queue_wf_c_targets_for_pt', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
-      "id": "m-set-c-input",
-      "name": "Set WF_C Input",
-      "type": "n8n-nodes-base.set",
+      "id": "m-expand-c",
+      "name": "Expand WF_C Candidates (Python)",
+      "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         160,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "out = []\nfor row in $json.get('queue_wf_d_pt_acunetixscan', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
+      },
+      "id": "m-expand-d",
+      "name": "Expand WF_D Candidates (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        560,
         20
       ]
     }
@@ -317,7 +307,7 @@
       "main": [
         [
           {
-            "node": "Set WF_A Input",
+            "node": "Expand WF_A Candidates (Python)",
             "type": "main",
             "index": 0
           }
@@ -346,7 +336,7 @@
       "main": [
         [
           {
-            "node": "Set WF_B Input",
+            "node": "Expand WF_B Candidates (Python)",
             "type": "main",
             "index": 0
           }
@@ -375,7 +365,7 @@
       "main": [
         [
           {
-            "node": "Set WF_C Input",
+            "node": "Expand WF_C Candidates (Python)",
             "type": "main",
             "index": 0
           }
@@ -404,7 +394,7 @@
       "main": [
         [
           {
-            "node": "Run WF_D_PT_AcunetixScan",
+            "node": "Expand WF_D Candidates (Python)",
             "type": "main",
             "index": 0
           }
@@ -412,7 +402,18 @@
         []
       ]
     },
-    "Set WF_A Input": {
+    "Get Product Types": {
+      "main": [
+        [
+          {
+            "node": "Get Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand WF_A Candidates (Python)": {
       "main": [
         [
           {
@@ -423,7 +424,7 @@
         ]
       ]
     },
-    "Set WF_B Input": {
+    "Expand WF_B Candidates (Python)": {
       "main": [
         [
           {
@@ -434,7 +435,7 @@
         ]
       ]
     },
-    "Set WF_C Input": {
+    "Expand WF_C Candidates (Python)": {
       "main": [
         [
           {
@@ -445,11 +446,11 @@
         ]
       ]
     },
-    "Get Product Types": {
+    "Expand WF_D Candidates (Python)": {
       "main": [
         [
           {
-            "node": "Get Products",
+            "node": "Run WF_D_PT_AcunetixScan",
             "type": "main",
             "index": 0
           }

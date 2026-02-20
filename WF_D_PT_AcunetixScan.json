@@ -7,7 +7,10 @@
       "name": "Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [-1180, 160]
+      "position": [
+        -1180,
+        160
+      ]
     },
     {
       "parameters": {
@@ -19,7 +22,10 @@
       "name": "Get PT Targets/Products",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-980, 160],
+      "position": [
+        -980,
+        160
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "mGl4PbJkKfeJbTg8",
@@ -46,18 +52,24 @@
       "name": "Get Active Acunetix Scans",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-760, 160]
+      "position": [
+        -760,
+        160
+      ]
     },
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "products = ($node['Get PT Targets/Products'].json.get('results') or [])\nscans_resp = $json\nactive = 0\nfor s in scans_resp.get('scans', []) or []:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        active += 1\n\ncapacity = max(0, 5 - active)\n\neligible = []\nfor p in products:\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n    if 'targets:ready' in tags and 'acunetix:active' not in tags:\n        eligible.append({\n          'product_id': p.get('id'),\n          'product_name': p.get('name')\n        })\n\nselected = eligible[:capacity]\nreturn [{\n  'json': {\n    'active_scans': active,\n    'scan_limit': 5,\n    'available_slots': capacity,\n    'dispatch_count': len(selected),\n    'dispatch_items': selected\n  }\n}]"
+        "pythonCode": "trigger_input = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\ntrigger_product_type_id = trigger_input.get('product_type_id')\ntrigger_domain = trigger_input.get('domain')\n\ntry:\n    trigger_product_type_id = int(trigger_product_type_id) if trigger_product_type_id is not None else None\nexcept Exception:\n    trigger_product_type_id = None\n\nproducts = ($node['Get PT Targets/Products'].json.get('results') or [])\nscans_resp = $json if isinstance($json, dict) else {}\nactive = 0\nfor s in scans_resp.get('scans', []) or []:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        active += 1\n\ncapacity = max(0, 5 - active)\n\neligible = []\nfor p in products:\n    if not isinstance(p, dict):\n        continue\n\n    product_type_id = p.get('prod_type')\n    try:\n        product_type_id = int(product_type_id)\n    except Exception:\n        continue\n\n    if trigger_product_type_id is not None and product_type_id != trigger_product_type_id:\n        continue\n\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n\n    if 'targets:ready' in tags and 'acunetix:active' not in tags:\n        eligible.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'product_type_id': product_type_id,\n            'domain': trigger_domain,\n        })\n\nselected = eligible[:capacity]\nreturn [{\n  'json': {\n    'active_scans': active,\n    'scan_limit': 5,\n    'available_slots': capacity,\n    'dispatch_count': len(selected),\n    'dispatch_items': selected\n  }\n}]"
       },
       "id": "d-plan",
       "name": "Build Dispatch Plan (Python)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-540, 160]
+      "position": [
+        -540,
+        160
+      ]
     },
     {
       "parameters": {
@@ -75,18 +87,24 @@
       "name": "Has capacity and products?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [-340, 160]
+      "position": [
+        -340,
+        160
+      ]
     },
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "out = []\nfor row in $json.get('dispatch_items', []):\n    out.append({'json': row})\nreturn out"
+        "pythonCode": "out = []\nfor row in $json.get('dispatch_items', []):\n    if not isinstance(row, dict):\n        continue\n    out.append({\n        'json': {\n            'product_id': row.get('product_id'),\n            'product_name': row.get('product_name'),\n            'product_type_id': row.get('product_type_id'),\n            'domain': row.get('domain'),\n        }\n    })\nreturn out"
       },
       "id": "d-expand",
       "name": "Expand Dispatch Items",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-120, 80]
+      "position": [
+        -120,
+        80
+      ]
     },
     {
       "parameters": {
@@ -99,22 +117,81 @@
       "name": "Run WF_D_ProductScan",
       "type": "n8n-nodes-base.executeWorkflow",
       "typeVersion": 1,
-      "position": [100, 80],
+      "position": [
+        100,
+        80
+      ],
       "continueOnFail": false
     }
   ],
   "connections": {
-    "Trigger": {"main": [[{"node": "Get PT Targets/Products", "type": "main", "index": 0}]]},
-    "Get PT Targets/Products": {"main": [[{"node": "Get Active Acunetix Scans", "type": "main", "index": 0}]]},
-    "Get Active Acunetix Scans": {"main": [[{"node": "Build Dispatch Plan (Python)", "type": "main", "index": 0}]]},
-    "Build Dispatch Plan (Python)": {"main": [[{"node": "Has capacity and products?", "type": "main", "index": 0}]]},
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get PT Targets/Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get PT Targets/Products": {
+      "main": [
+        [
+          {
+            "node": "Get Active Acunetix Scans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Active Acunetix Scans": {
+      "main": [
+        [
+          {
+            "node": "Build Dispatch Plan (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Dispatch Plan (Python)": {
+      "main": [
+        [
+          {
+            "node": "Has capacity and products?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Has capacity and products?": {
       "main": [
-        [{"node": "Expand Dispatch Items", "type": "main", "index": 0}],
+        [
+          {
+            "node": "Expand Dispatch Items",
+            "type": "main",
+            "index": 0
+          }
+        ],
         []
       ]
     },
-    "Expand Dispatch Items": {"main": [[{"node": "Run WF_D_ProductScan", "type": "main", "index": 0}]]}
+    "Expand Dispatch Items": {
+      "main": [
+        [
+          {
+            "node": "Run WF_D_ProductScan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
   "settings": {
