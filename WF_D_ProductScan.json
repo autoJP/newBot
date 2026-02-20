@@ -1,0 +1,257 @@
+{
+  "name": "WF_D_ProductScan",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "p-trigger",
+      "name": "Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [-1320, 220]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/' + $json.product_id + '/' }}",
+        "options": {}
+      },
+      "id": "p-product",
+      "name": "Get Product",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-1120, 220],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/scans?l=100&q=' + encodeURIComponent($json.name) }}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "p-existing",
+      "name": "Check Existing Acunetix Scans",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [-920, 220]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "product = $node['Get Product'].json\nexisting = $json.get('scans', []) or []\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{\n          'json': {\n            'skip': True,\n            'reason': 'scan already active',\n            'product_id': product.get('id'),\n            'product_name': product.get('name'),\n            'scan_id': s.get('scan_id')\n          }\n        }]\n\nreturn [{\n  'json': {\n    'skip': False,\n    'product_id': product.get('id'),\n    'product_name': product.get('name'),\n    'target_url': f\"https://{product.get('name')}\"\n  }\n}]"
+      },
+      "id": "p-gate",
+      "name": "Duplicate Guard (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [-700, 220]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.skip }}"
+            }
+          ]
+        }
+      },
+      "id": "p-if-skip",
+      "name": "Skip new launch?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [-500, 220]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/scans' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"target_id\": $json.product_name, \"profile_id\": \"11111111-1111-1111-1111-111111111111\", \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "p-start",
+      "name": "Start Scan",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [-280, 120]
+    },
+    {
+      "parameters": {
+        "amount": 30,
+        "unit": "seconds"
+      },
+      "id": "p-wait",
+      "name": "Polling Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [-80, 120]
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/scans/' + $node['Start Scan'].json.scan_id }}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "p-status",
+      "name": "Get Scan Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [120, 120]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "s = ($json.get('current_session') or {})\nstatus = s.get('status', '')\nfinished = status in ['completed', 'failed', 'aborted']\nreturn [{ 'json': { 'status': status, 'finished': finished } }]"
+      },
+      "id": "p-check",
+      "name": "Check Finished (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [320, 120]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.finished }}"
+            }
+          ]
+        }
+      },
+      "id": "p-if-finished",
+      "name": "Finished?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [520, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/reports' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"template_id\": \"11111111-1111-1111-1111-111111111111\", \"source\": {\"list_type\": \"scans\", \"id_list\": [$node['Start Scan'].json.scan_id]}}",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "p-report",
+      "name": "Generate Report",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 120]
+    },
+    {
+      "parameters": {
+        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/reports/' + $json.report_id + '/download' }}",
+        "responseFormat": "file",
+        "headerParametersUi": {
+          "parameter": [
+            {
+              "name": "X-Auth",
+              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
+            }
+          ]
+        }
+      },
+      "id": "p-export",
+      "name": "Export XML",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [960, 120]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/import-scan/' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {"name": "scan_type", "value": "Acunetix Scan"},
+            {"name": "product", "value": "={{ $node['Duplicate Guard (Python)'].json.product_id }}"},
+            {"name": "active", "value": "true"},
+            {"name": "verified", "value": "true"},
+            {"name": "minimum_severity", "value": "Info"},
+            {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "data"},
+            {"name": "auto_create_context", "value": "true"}
+          ]
+        }
+      },
+      "id": "p-import",
+      "name": "Import XML to DefectDojo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1180, 120],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Trigger": {"main": [[{"node": "Get Product", "type": "main", "index": 0}]]},
+    "Get Product": {"main": [[{"node": "Check Existing Acunetix Scans", "type": "main", "index": 0}]]},
+    "Check Existing Acunetix Scans": {"main": [[{"node": "Duplicate Guard (Python)", "type": "main", "index": 0}]]},
+    "Duplicate Guard (Python)": {"main": [[{"node": "Skip new launch?", "type": "main", "index": 0}]]},
+    "Skip new launch?": {
+      "main": [
+        [],
+        [{"node": "Start Scan", "type": "main", "index": 0}]
+      ]
+    },
+    "Start Scan": {"main": [[{"node": "Polling Wait", "type": "main", "index": 0}]]},
+    "Polling Wait": {"main": [[{"node": "Get Scan Status", "type": "main", "index": 0}]]},
+    "Get Scan Status": {"main": [[{"node": "Check Finished (Python)", "type": "main", "index": 0}]]},
+    "Check Finished (Python)": {"main": [[{"node": "Finished?", "type": "main", "index": 0}]]},
+    "Finished?": {
+      "main": [
+        [{"node": "Generate Report", "type": "main", "index": 0}],
+        [{"node": "Polling Wait", "type": "main", "index": 0}]
+      ]
+    },
+    "Generate Report": {"main": [[{"node": "Export XML", "type": "main", "index": 0}]]},
+    "Export XML": {"main": [[{"node": "Import XML to DefectDojo", "type": "main", "index": 0}]]}
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
