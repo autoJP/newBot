@@ -61,11 +61,11 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import re\n\ninput_data = $node['Set Parameters'].json\npt = $json\n\npt_id_str = input_data.get('product_type_id')\ntry:\n    pt_id = int(pt_id_str)\nexcept Exception:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_str}')\n\nif not pt_id:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_str}')\n\ndomain = input_data.get('domain') or ''\nif not domain and isinstance(pt, dict):\n    domain = pt.get('name') or ''\n\nif not domain:\n    raise Exception(f'Could not determine domain for Product Type {pt_id}')\n\n# normalize: strip scheme, path, port, lowercase\ndomain = domain.strip()\ndomain = re.sub(r'^https?://', '', domain, flags=re.IGNORECASE)\ndomain = domain.split('/')[0]\ndomain = domain.split(':')[0]\ndomain = domain.lower()\n\nif not domain:\n    raise Exception(f'Domain normalization produced empty value for Product Type {pt_id}')\n\nreturn [{\n    'json': {\n        'product_type_id': pt_id,\n        'domain': domain,\n        'product_type': pt\n    }\n}]"
+        "pythonCode": "import re\n\n\ndef is_mapping_like(v):\n    return hasattr(v, 'get') or hasattr(v, '__getitem__')\n\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\ndef to_candidates(payload):\n    # Case 1: mapping-like single object\n    if is_mapping_like(payload):\n        return [payload]\n\n    # Case 2: list/iterable of objects (including n8n proxy arrays)\n    try:\n        arr = [x for x in payload]\n    except Exception:\n        return []\n\n    out = []\n    for x in arr:\n        if is_mapping_like(x):\n            out.append(x)\n    return out\n\n\nitems = _input.all()\nif not items:\n    raise Exception('Extract Domain: no input items')\n\noutput = []\nfor item in items:\n    payload = item.json\n    candidates = to_candidates(payload)\n\n    for pt in candidates:\n        # Prefer `id` from Dojo Product Type input; fallback to product_type_id\n        pt_id_raw = read_key(pt, 'id')\n        if pt_id_raw is None:\n            pt_id_raw = read_key(pt, 'product_type_id')\n\n        try:\n            pt_id = int(pt_id_raw)\n        except Exception:\n            raise Exception(f'product_type_id is missing or invalid: {pt_id_raw}')\n\n        domain = (read_key(pt, 'name', '') or read_key(pt, 'domain', '')).strip()\n        if not domain:\n            raise Exception(f'Could not determine domain for Product Type {pt_id}')\n\n        domain = re.sub(r'^https?://', '', domain, flags=re.IGNORECASE)\n        domain = domain.split('/')[0]\n        domain = domain.split(':')[0]\n        domain = domain.lower().strip()\n\n        if not domain:\n            raise Exception(f'Domain normalization produced empty value for Product Type {pt_id}')\n\n        output.append({\n            'json': {\n                'product_type_id': pt_id,\n                'domain': domain,\n                'product_type': pt,\n            }\n        })\n\nif not output:\n    raise Exception('Extract Domain: no valid product type objects in input')\n\nreturn output\n"
       },
       "name": "Extract Domain",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         -608,
         112
@@ -108,11 +108,11 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import json\n\nstdout = $json.get('stdout') or '{}'\ntry:\n    result = json.loads(stdout)\nexcept Exception as e:\n    raise Exception(f'Failed to parse JSON from enum_subs_auto.py: {e}')\n\nsubs = result.get('subs') or []\nif not isinstance(subs, list):\n    raise Exception('Invalid subdomains format from script')\n\nhosts = []\nfor item in subs:\n    if isinstance(item, str) and item:\n        hosts.append(item)\n    elif isinstance(item, dict) and item.get('host') and isinstance(item.get('host'), str):\n        hosts.append(item.get('host'))\n\nextract = $node['Extract Domain'].json\nreturn [{\n    'json': {\n        'product_type_id': extract.get('product_type_id'),\n        'domain': extract.get('domain'),\n        'subdomains': hosts,\n        'raw_result': result\n    }\n}]"
+        "pythonCode": "import json\n\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\nitems = _input.all()\nextract_items = _(\"Extract Domain\").all()\n\nif not items:\n    raise Exception('Parse Results: no input items')\n\noutput = []\nfor idx, item in enumerate(items):\n    payload = item.json\n\n    stdout = read_key(payload, 'stdout', '{}')\n    try:\n        result = json.loads(stdout)\n    except Exception as e:\n        raise Exception(f'Failed to parse JSON from enum_subs_auto.py: {e}')\n\n    subs = read_key(result, 'subs', [])\n    if not isinstance(subs, list):\n        raise Exception('Invalid subdomains format from script')\n\n    hosts = []\n    for sub in subs:\n        if isinstance(sub, str) and sub:\n            hosts.append(sub)\n        elif isinstance(sub, dict) and isinstance(sub.get('host'), str) and sub.get('host'):\n            hosts.append(sub['host'])\n\n    extract = extract_items[idx].json if idx < len(extract_items) else {}\n\n    output.append({\n        'json': {\n            'product_type_id': read_key(extract, 'product_type_id'),\n            'domain': read_key(extract, 'domain'),\n            'subdomains': hosts,\n            'raw_result': result,\n        }\n    })\n\nreturn output\n"
       },
       "name": "Parse Results",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         0,
         0
@@ -143,11 +143,11 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "parsed = $node['Parse Results'].json\npt_id = parsed.get('product_type_id')\ndomain = parsed.get('domain')\nsubs = parsed.get('subdomains') or []\n\nresp = $json or {}\nresults = resp.get('results') if isinstance(resp, dict) else []\nif not isinstance(results, list):\n    results = []\n\nexisting_names = set()\nfor product in results:\n    if isinstance(product, dict) and product.get('name'):\n        existing_names.add(product.get('name'))\n\nhosts_to_create = []\nfor host in subs:\n    if isinstance(host, str) and host and host not in existing_names:\n        hosts_to_create.append(host)\n\n# If no subdomains found at all, create root Product for domain if it doesn't exist\nif len(subs) == 0 and domain and domain not in existing_names:\n    hosts_to_create.append(domain)\n\nreturn [{\n    'json': {\n        'product_type_id': pt_id,\n        'domain': domain,\n        'host': host\n    }\n} for host in hosts_to_create]"
+        "pythonCode": "def read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\nitems = _input.all()\nparsed_items = _(\"Parse Results\").all()\n\nif not items:\n    return []\n\noutput = []\nfor idx, item in enumerate(items):\n    payload = item.json\n    parsed = parsed_items[idx].json if idx < len(parsed_items) else {}\n\n    pt_id = read_key(parsed, 'product_type_id')\n    domain = read_key(parsed, 'domain')\n    subs = read_key(parsed, 'subdomains', [])\n    if not isinstance(subs, list):\n        subs = []\n\n    results = read_key(payload, 'results', [])\n    if not isinstance(results, list):\n        results = []\n\n    existing_names = set()\n    for product in results:\n        try:\n            name = product.get('name')\n        except Exception:\n            try:\n                name = product['name']\n            except Exception:\n                name = None\n        if isinstance(name, str) and name:\n            existing_names.add(name)\n\n    hosts_to_create = []\n    for host in subs:\n        if isinstance(host, str) and host and host not in existing_names:\n            hosts_to_create.append(host)\n\n    if len(subs) == 0 and isinstance(domain, str) and domain and domain not in existing_names:\n        hosts_to_create.append(domain)\n\n    for host in hosts_to_create:\n        output.append({\n            'json': {\n                'product_type_id': pt_id,\n                'domain': domain,\n                'host': host,\n            }\n        })\n\nreturn output\n"
       },
       "name": "Prepare Create List",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         400,
         0
@@ -201,11 +201,11 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "from datetime import datetime, timezone\n\nparsed = $node['Parse Results'].json\nsubs = parsed.get('subdomains') or []\n\nreturn [{\n    'json': {\n        'product_type_id': parsed.get('product_type_id'),\n        'domain': parsed.get('domain'),\n        'total_subdomains_found': len(subs),\n        'timestamp': datetime.now(timezone.utc).isoformat()\n    }\n}]"
+        "pythonCode": "from datetime import datetime, timezone\n\nitems = _input.all()\nif not items:\n    return []\n\noutput = []\nfor item in items:\n    payload = item.json if isinstance(item.json, dict) else {}\n    subs = payload.get('subdomains') or []\n    if not isinstance(subs, list):\n        subs = []\n\n    output.append({\n        'json': {\n            'product_type_id': payload.get('product_type_id'),\n            'domain': payload.get('domain'),\n            'total_subdomains_found': len(subs),\n            'timestamp': datetime.now(timezone.utc).isoformat(),\n        }\n    })\n\nreturn output\n"
       },
       "name": "Generate Final Report",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         400,
         208
@@ -215,11 +215,11 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "exit_code = $json.get('exitCode')\nstderr = $json.get('stderr') or ''\nraise Exception(f'Subdomain enumeration failed with exit code {exit_code}: {stderr}')"
+        "pythonCode": "item = _input.first()\npayload = item.json if item and isinstance(item.json, dict) else {}\n\nexit_code = payload.get('exitCode')\nstderr = payload.get('stderr') or ''\nraise Exception(f'Subdomain enumeration failed with exit code {exit_code}: {stderr}')\n"
       },
       "name": "Handle Script Error",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         0,
         208
