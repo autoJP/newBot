@@ -285,7 +285,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'product_types': results}}]"
+        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\n# In n8n Python, json may be a proxy/Mapping-like object, not a plain dict.\n# So we avoid strict dict checks and read fields defensively.\nresults = []\ntry:\n    results = item.get('results')\nexcept Exception:\n    try:\n        results = item['results']\n    except Exception:\n        results = []\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'product_types': results}}]"
       },
       "id": "m-prepare-pt",
       "name": "Prepare Product Types (Python)",
