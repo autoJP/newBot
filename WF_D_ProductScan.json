@@ -7,7 +7,10 @@
       "name": "Trigger",
       "type": "n8n-nodes-base.executeWorkflowTrigger",
       "typeVersion": 1,
-      "position": [-1320, 220]
+      "position": [
+        -1320,
+        220
+      ]
     },
     {
       "parameters": {
@@ -19,7 +22,10 @@
       "name": "Get Product",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-1120, 220],
+      "position": [
+        -1120,
+        220
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "mGl4PbJkKfeJbTg8",
@@ -44,7 +50,10 @@
       "name": "Check Existing Acunetix Scans",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [-920, 220]
+      "position": [
+        -920,
+        220
+      ]
     },
     {
       "parameters": {
@@ -55,7 +64,10 @@
       "name": "Duplicate Guard (Python)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [-700, 220]
+      "position": [
+        -700,
+        220
+      ]
     },
     {
       "parameters": {
@@ -71,7 +83,10 @@
       "name": "Skip new launch?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [-500, 220]
+      "position": [
+        -500,
+        220
+      ]
     },
     {
       "parameters": {
@@ -93,7 +108,24 @@
       "name": "Start Scan",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [-280, 120]
+      "position": [
+        -280,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import time\nitem = dict($json)\nitem['started_at_epoch'] = int(time.time())\nitem['poll_count'] = 0\nitem['max_poll_count'] = 40\nreturn [{ 'json': item }]"
+      },
+      "id": "p-init-poll",
+      "name": "Init Poll Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -180,
+        120
+      ]
     },
     {
       "parameters": {
@@ -104,7 +136,10 @@
       "name": "Polling Wait",
       "type": "n8n-nodes-base.wait",
       "typeVersion": 1,
-      "position": [-80, 120]
+      "position": [
+        -80,
+        120
+      ]
     },
     {
       "parameters": {
@@ -122,25 +157,31 @@
       "name": "Get Scan Status",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [120, 120]
+      "position": [
+        120,
+        120
+      ]
     },
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "s = ($json.get('current_session') or {})\nstatus = s.get('status', '')\nfinished = status in ['completed', 'failed', 'aborted']\nreturn [{ 'json': { 'status': status, 'finished': finished } }]"
+        "pythonCode": "import time\ns = ($json.get('current_session') or {})\nstatus = s.get('status', '')\nfinished = status in ['completed', 'failed', 'aborted']\npoll_count = len(_(\"Get Scan Status\").all())\ninit = _(\"Init Poll Context\").first().json if len(_(\"Init Poll Context\").all()) else {}\nstarted_at_epoch = int(init.get('started_at_epoch', int(time.time())))\nmax_poll_count = int(init.get('max_poll_count', 40))\ntimed_out = (not finished) and poll_count >= max_poll_count\nreturn [{ 'json': { 'status': status, 'finished': finished, 'timed_out': timed_out, 'poll_count': poll_count, 'max_poll_count': max_poll_count, 'started_at_epoch': started_at_epoch } }]"
       },
       "id": "p-check",
       "name": "Check Finished (Python)",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [320, 120]
+      "position": [
+        320,
+        120
+      ]
     },
     {
       "parameters": {
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.finished }}"
+              "value1": "={{ $json.finished || $json.timed_out }}"
             }
           ]
         }
@@ -149,7 +190,42 @@
       "name": "Finished?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 1,
-      "position": [520, 120]
+      "position": [
+        520,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.timed_out }}"
+            }
+          ]
+        }
+      },
+      "id": "p-if-timeout",
+      "name": "Timed out?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        700,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "message": "=Scan polling timed out after {{$json.poll_count}} checks (limit {{$json.max_poll_count}})."
+      },
+      "id": "p-timeout-error",
+      "name": "Timeout Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        900,
+        280
+      ]
     },
     {
       "parameters": {
@@ -171,7 +247,10 @@
       "name": "Generate Report",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [740, 120]
+      "position": [
+        740,
+        120
+      ]
     },
     {
       "parameters": {
@@ -190,7 +269,10 @@
       "name": "Export XML",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 1,
-      "position": [960, 120]
+      "position": [
+        960,
+        120
+      ]
     },
     {
       "parameters": {
@@ -202,13 +284,35 @@
         "contentType": "multipart-form-data",
         "bodyParameters": {
           "parameters": [
-            {"name": "scan_type", "value": "Acunetix Scan"},
-            {"name": "product", "value": "={{ $node['Duplicate Guard (Python)'].json.product_id }}"},
-            {"name": "active", "value": "true"},
-            {"name": "verified", "value": "true"},
-            {"name": "minimum_severity", "value": "Info"},
-            {"parameterType": "formBinaryData", "name": "file", "inputDataFieldName": "data"},
-            {"name": "auto_create_context", "value": "true"}
+            {
+              "name": "scan_type",
+              "value": "Acunetix Scan"
+            },
+            {
+              "name": "product",
+              "value": "={{ $node['Duplicate Guard (Python)'].json.product_id }}"
+            },
+            {
+              "name": "active",
+              "value": "true"
+            },
+            {
+              "name": "verified",
+              "value": "true"
+            },
+            {
+              "name": "minimum_severity",
+              "value": "Info"
+            },
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "auto_create_context",
+              "value": "true"
+            }
           ]
         }
       },
@@ -216,7 +320,10 @@
       "name": "Import XML to DefectDojo",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1180, 120],
+      "position": [
+        1180,
+        120
+      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "mGl4PbJkKfeJbTg8",
@@ -226,28 +333,175 @@
     }
   ],
   "connections": {
-    "Trigger": {"main": [[{"node": "Get Product", "type": "main", "index": 0}]]},
-    "Get Product": {"main": [[{"node": "Check Existing Acunetix Scans", "type": "main", "index": 0}]]},
-    "Check Existing Acunetix Scans": {"main": [[{"node": "Duplicate Guard (Python)", "type": "main", "index": 0}]]},
-    "Duplicate Guard (Python)": {"main": [[{"node": "Skip new launch?", "type": "main", "index": 0}]]},
+    "Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Product": {
+      "main": [
+        [
+          {
+            "node": "Check Existing Acunetix Scans",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Existing Acunetix Scans": {
+      "main": [
+        [
+          {
+            "node": "Duplicate Guard (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Duplicate Guard (Python)": {
+      "main": [
+        [
+          {
+            "node": "Skip new launch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Skip new launch?": {
       "main": [
         [],
-        [{"node": "Start Scan", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Start Scan",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Start Scan": {"main": [[{"node": "Polling Wait", "type": "main", "index": 0}]]},
-    "Polling Wait": {"main": [[{"node": "Get Scan Status", "type": "main", "index": 0}]]},
-    "Get Scan Status": {"main": [[{"node": "Check Finished (Python)", "type": "main", "index": 0}]]},
-    "Check Finished (Python)": {"main": [[{"node": "Finished?", "type": "main", "index": 0}]]},
+    "Start Scan": {
+      "main": [
+        [
+          {
+            "node": "Init Poll Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Polling Wait": {
+      "main": [
+        [
+          {
+            "node": "Get Scan Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Scan Status": {
+      "main": [
+        [
+          {
+            "node": "Check Finished (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Finished (Python)": {
+      "main": [
+        [
+          {
+            "node": "Finished?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
     "Finished?": {
       "main": [
-        [{"node": "Generate Report", "type": "main", "index": 0}],
-        [{"node": "Polling Wait", "type": "main", "index": 0}]
+        [
+          {
+            "node": "Timed out?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Polling Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
-    "Generate Report": {"main": [[{"node": "Export XML", "type": "main", "index": 0}]]},
-    "Export XML": {"main": [[{"node": "Import XML to DefectDojo", "type": "main", "index": 0}]]}
+    "Generate Report": {
+      "main": [
+        [
+          {
+            "node": "Export XML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Export XML": {
+      "main": [
+        [
+          {
+            "node": "Import XML to DefectDojo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Init Poll Context": {
+      "main": [
+        [
+          {
+            "node": "Polling Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Timed out?": {
+      "main": [
+        [
+          {
+            "node": "Timeout Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   },
   "active": false,
   "settings": {
