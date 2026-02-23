@@ -61,11 +61,11 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import re\n\ninput_data = $node['Set Parameters'].json\npt = $json\n\npt_id_str = input_data.get('product_type_id')\ntry:\n    pt_id = int(pt_id_str)\nexcept Exception:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_str}')\n\nif not pt_id:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_str}')\n\ndomain = input_data.get('domain') or ''\nif not domain and isinstance(pt, dict):\n    domain = pt.get('name') or ''\n\nif not domain:\n    raise Exception(f'Could not determine domain for Product Type {pt_id}')\n\n# normalize: strip scheme, path, port, lowercase\ndomain = domain.strip()\ndomain = re.sub(r'^https?://', '', domain, flags=re.IGNORECASE)\ndomain = domain.split('/')[0]\ndomain = domain.split(':')[0]\ndomain = domain.lower()\n\nif not domain:\n    raise Exception(f'Domain normalization produced empty value for Product Type {pt_id}')\n\nreturn [{\n    'json': {\n        'product_type_id': pt_id,\n        'domain': domain,\n        'product_type': pt\n    }\n}]"
+        "pythonCode": "import re\n\nfirst_item = _input.first()\nif first_item is None:\n    raise Exception('Extract Domain: no input item')\n\npt = first_item.json if isinstance(first_item.json, dict) else {}\n\npt_id_raw = pt.get('id') or pt.get('product_type_id')\ntry:\n    pt_id = int(pt_id_raw)\nexcept Exception:\n    raise Exception(f'product_type_id is missing or invalid: {pt_id_raw}')\n\ndomain = (pt.get('name') or '').strip()\nif not domain:\n    raise Exception(f'Could not determine domain for Product Type {pt_id}')\n\n# normalize: strip scheme, path, port, lowercase\ndomain = re.sub(r'^https?://', '', domain, flags=re.IGNORECASE)\ndomain = domain.split('/')[0]\ndomain = domain.split(':')[0]\ndomain = domain.lower().strip()\n\nif not domain:\n    raise Exception(f'Domain normalization produced empty value for Product Type {pt_id}')\n\nreturn [{\n    'json': {\n        'product_type_id': pt_id,\n        'domain': domain,\n        'product_type': pt\n    }\n}]\n"
       },
       "name": "Extract Domain",
       "type": "n8n-nodes-base.code",
-      "typeVersion": 1,
+      "typeVersion": 2,
       "position": [
         -608,
         112
