@@ -221,7 +221,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = $json\nraw = item.get('product_id')\n\ntry:\n    product_id = int(raw)\nexcept Exception:\n    raise Exception(f'product_id is missing or invalid: {raw}')\n\nif product_id <= 0:\n    raise Exception(f'product_id must be > 0, got: {raw}')\n\nreturn [{\n    'json': {\n        **item,\n        'product_id': product_id\n    }\n}]"
+        "pythonCode": "items = _input.all()\nif not items:\n    return []\n\nout = []\nfor item in items:\n    payload = item.json\n\n    try:\n        raw = payload.get('product_id')\n    except Exception:\n        try:\n            raw = payload['product_id']\n        except Exception:\n            raw = None\n\n    try:\n        product_id = int(raw)\n    except Exception:\n        raise Exception(f'product_id is missing or invalid: {raw}')\n\n    if product_id <= 0:\n        raise Exception(f'product_id must be > 0, got: {raw}')\n\n    product_name = None\n    product_type_id = None\n    try:\n        product_name = payload.get('product_name')\n        product_type_id = payload.get('product_type_id')\n    except Exception:\n        try:\n            product_name = payload['product_name']\n        except Exception:\n            pass\n        try:\n            product_type_id = payload['product_type_id']\n        except Exception:\n            pass\n\n    out.append({\n        'json': {\n            'product_id': product_id,\n            'product_name': product_name,\n            'product_type_id': product_type_id,\n        }\n    })\n\nreturn out\n"
       },
       "name": "Validate Product ID",
       "type": "n8n-nodes-base.code",
