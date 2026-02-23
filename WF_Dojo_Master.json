@@ -74,7 +74,8 @@
           "boolean": [
             {
               "value1": "={{$json.run_subdomains}}",
-              "operation": "isTrue"
+              "operation": "equal",
+              "value2": true
             }
           ]
         }
@@ -111,7 +112,8 @@
           "boolean": [
             {
               "value1": "={{$json.run_nmap}}",
-              "operation": "isTrue"
+              "operation": "equal",
+              "value2": true
             }
           ]
         }
@@ -148,7 +150,8 @@
           "boolean": [
             {
               "value1": "={{$json.run_targets}}",
-              "operation": "isTrue"
+              "operation": "equal",
+              "value2": true
             }
           ]
         }
@@ -185,7 +188,8 @@
           "boolean": [
             {
               "value1": "={{$json.run_acunetix}}",
-              "operation": "isTrue"
+              "operation": "equal",
+              "value2": true
             }
           ]
         }
