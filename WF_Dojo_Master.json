@@ -91,7 +91,7 @@
     },
     {
       "parameters": {
-        "workflowId": "WF_A_Subdomains_PT",
+        "workflowId": "={{ $env.WF_A_Subdomains_PT }}",
         "options": {
           "waitForSubWorkflow": true
         }
@@ -129,7 +129,7 @@
     },
     {
       "parameters": {
-        "workflowId": "WF_B_Nmap_Product",
+        "workflowId": "={{ $env.WF_B_Nmap_Product }}",
         "options": {
           "waitForSubWorkflow": true
         }
@@ -167,7 +167,7 @@
     },
     {
       "parameters": {
-        "workflowId": "WF_C_Targets_For_PT",
+        "workflowId": "={{ $env.WF_C_Targets_For_PT }}",
         "options": {
           "waitForSubWorkflow": true
         }
@@ -205,7 +205,7 @@
     },
     {
       "parameters": {
-        "workflowId": "WF_D_PT_AcunetixScan",
+        "workflowId": "={{ $env.WF_D_PT_AcunetixScan }}",
         "options": {
           "waitForSubWorkflow": true
         }
