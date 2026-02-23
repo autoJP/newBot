@@ -73,7 +73,8 @@
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.run_subdomains }}"
+              "value1": "={{$json.run_subdomains}}",
+              "operation": "isTrue"
             }
           ]
         }
@@ -109,7 +110,8 @@
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.run_nmap }}"
+              "value1": "={{$json.run_nmap}}",
+              "operation": "isTrue"
             }
           ]
         }
@@ -145,7 +147,8 @@
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.run_targets }}"
+              "value1": "={{$json.run_targets}}",
+              "operation": "isTrue"
             }
           ]
         }
@@ -181,7 +184,8 @@
         "conditions": {
           "boolean": [
             {
-              "value1": "={{ $json.run_acunetix }}"
+              "value1": "={{$json.run_acunetix}}",
+              "operation": "isTrue"
             }
           ]
         }
