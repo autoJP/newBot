@@ -215,7 +215,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "incoming = _input.first().json if _input.first() else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_a_subdomains_pt', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
+        "pythonCode": "first_item = _input.first()\nincoming = first_item.json if first_item else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_a_subdomains_pt', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
       "id": "m-expand-a",
       "name": "Expand WF_A Candidates (Python)",
@@ -229,7 +229,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "incoming = _input.first().json if _input.first() else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_b_nmap_product', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_id'] = row.get('product_id')\n    item['product_name'] = row.get('product_name')\n    item['product_type_id'] = row.get('product_type_id')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
+        "pythonCode": "first_item = _input.first()\nincoming = first_item.json if first_item else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_b_nmap_product', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_id'] = row.get('product_id')\n    item['product_name'] = row.get('product_name')\n    item['product_type_id'] = row.get('product_type_id')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
       "id": "m-expand-b",
       "name": "Expand WF_B Candidates (Python)",
@@ -243,7 +243,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "incoming = _input.first().json if _input.first() else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_c_targets_for_pt', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
+        "pythonCode": "first_item = _input.first()\nincoming = first_item.json if first_item else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_c_targets_for_pt', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
       "id": "m-expand-c",
       "name": "Expand WF_C Candidates (Python)",
@@ -257,7 +257,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "incoming = _input.first().json if _input.first() else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_d_pt_acunetixscan', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
+        "pythonCode": "first_item = _input.first()\nincoming = first_item.json if first_item else {}\nif not isinstance(incoming, dict):\n    incoming = {}\nout = []\nfor row in incoming.get('queue_wf_d_pt_acunetixscan', []) or []:\n    if not isinstance(row, dict):\n        continue\n    item = {}\n    item['product_type_id'] = row.get('product_type_id')\n    item['product_type_name'] = row.get('product_type_name')\n    item['domain'] = row.get('domain')\n    out.append({'json': item})\nreturn out"
       },
       "id": "m-expand-d",
       "name": "Expand WF_D Candidates (Python)",
@@ -271,7 +271,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = _input.first().json if _input.first() else {}\nif not isinstance(item, dict):\n    item = {}\nreturn [{'json': {'trigger': item}}]"
+        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nreturn [{'json': {'trigger': item}}]"
       },
       "id": "m-prepare-trigger",
       "name": "Prepare Trigger Input (Python)",
@@ -285,7 +285,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = _input.first().json if _input.first() else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'product_types': results}}]"
+        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'product_types': results}}]"
       },
       "id": "m-prepare-pt",
       "name": "Prepare Product Types (Python)",
@@ -299,7 +299,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = _input.first().json if _input.first() else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'products': results}}]"
+        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'products': results}}]"
       },
       "id": "m-prepare-products",
       "name": "Prepare Products (Python)",
@@ -385,7 +385,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = _input.first().json if _input.first() else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'product_types': results}}]"
+        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'product_types': results}}]"
       },
       "id": "m-prepare-pt-after-a",
       "name": "Prepare Product Types After WF_A (Python)",
@@ -399,7 +399,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = _input.first().json if _input.first() else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'products': results}}]"
+        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nresults = item.get('results')\nif not isinstance(results, list):\n    results = []\nreturn [{'json': {'products': results}}]"
       },
       "id": "m-prepare-products-after-a",
       "name": "Prepare Products After WF_A (Python)",
