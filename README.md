@@ -117,8 +117,18 @@
 - `NMAP_CONCURRENCY` — ограничение количества Product-задач в этапе nmap за проход.
 - `PT_WINDOW_SIZE` — сколько PT анализируется за проход планировщика.
 
-Важно: этот лимит применяется на уровне оркестратора к количеству PT, одновременно запущенных в `WF_A_Subdomains_PT`.
-Он **не** ограничивает внутренний параллелизм внутри одного PT/job (например, если внутри `WF_A_Subdomains_PT` будут добавлены параллельные источники subdomains).
+Важно: лимит применяется по фактическому числу внутренних subdomain jobs (`counters.subdomains_running`) во всех PT.
+Это означает, что один PT с несколькими параллельными subdomain jobs может занять несколько слотов `SUBDOMAINS_CONCURRENCY`.
+
+
+Рекомендуемые значения в `.env`:
+
+```env
+SUBDOMAINS_CONCURRENCY=5
+SUBDOMAINS_RUNNING_TIMEOUT_MINUTES=60
+NMAP_CONCURRENCY=5
+PT_WINDOW_SIZE=300
+```
 
 `WF_A_Subdomains_PT` теперь фиксирует результат этапа subdomains в PT-state:
 
