@@ -104,11 +104,16 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "item = $json\nraw = item.get('product_type_id')\n\ntry:\n    product_type_id = int(raw)\nexcept Exception:\n    raise Exception(f'product_type_id is missing or invalid: {raw}')\n\nif product_type_id <= 0:\n    raise Exception(f'product_type_id must be > 0, got: {raw}')\n\nreturn [{\n    'json': {\n        **item,\n        'product_type_id': product_type_id\n    }\n}]"
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ Number($json.product_type_id) > 0 }}"
+            }
+          ]
+        }
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
       "position": [
         320,
         0
@@ -118,17 +123,98 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "import json\nimport os\n\n\ndef parse_positive_int(value, default):\n    try:\n        parsed = int(value)\n        if parsed > 0:\n            return parsed\n    except Exception:\n        pass\n    return default\n\n\ndef normalize_selected_node(raw):\n    if not isinstance(raw, dict):\n        return None\n    endpoint = str(raw.get('endpoint') or '').strip().rstrip('/')\n    token = str(raw.get('api_key') or raw.get('token') or '').strip()\n    if not endpoint:\n        return None\n    if not token:\n        return {\n            'endpoint': endpoint,\n            'name': str(raw.get('name') or 'acu-selected').strip() or 'acu-selected',\n            'weight': parse_positive_int(raw.get('weight', 1), 1),\n        }\n    return {\n        'endpoint': endpoint,\n        'api_key': token,\n        'token': token,\n        'name': str(raw.get('name') or 'acu-selected').strip() or 'acu-selected',\n        'weight': parse_positive_int(raw.get('weight', 1), 1),\n    }\n\n\nitem = $json\npt_id = item.get('pt_id', item.get('product_type_id'))\nincoming_selected_node = normalize_selected_node(item.get('selected_acu_node')) or {}\n\nendpoint = str(item.get('acunetix_endpoint') or incoming_selected_node.get('endpoint') or '').strip().rstrip('/')\nnode_name = (item.get('acunetix_node_name') or incoming_selected_node.get('name') or 'acu-selected').strip() or 'acu-selected'\n\nif not endpoint:\n    raise Exception(f'WF_C_Targets_For_PT stage config error (pt_id={pt_id}): acunetix_endpoint is required. Pass selected node endpoint from orchestrator payload.')\n\nruntime_api_key = str(incoming_selected_node.get('api_key') or incoming_selected_node.get('token') or '').strip()\n\nif not runtime_api_key:\n    raw_nodes = (os.environ.get('ACUNETIX_INSTANCES_JSON') or '').strip()\n    if raw_nodes:\n        try:\n            parsed_nodes = json.loads(raw_nodes)\n            if isinstance(parsed_nodes, list):\n                normalized_endpoint = endpoint.rstrip('/')\n                for candidate in parsed_nodes:\n                    normalized_candidate = normalize_selected_node(candidate)\n                    if not normalized_candidate:\n                        continue\n                    candidate_endpoint = str(normalized_candidate.get('endpoint') or '').strip().rstrip('/')\n                    candidate_name = str(normalized_candidate.get('name') or '').strip()\n                    if candidate_endpoint == normalized_endpoint or (candidate_name and candidate_name == node_name):\n                        runtime_api_key = str(normalized_candidate.get('api_key') or normalized_candidate.get('token') or '').strip()\n                        if runtime_api_key:\n                            if not node_name and candidate_name:\n                                node_name = candidate_name\n                            break\n        except Exception:\n            runtime_api_key = runtime_api_key\n\nif not runtime_api_key:\n    raise Exception(f'WF_C_Targets_For_PT stage config error (pt_id={pt_id}): Acunetix API key must come from runtime selected_acu_node or ACUNETIX_INSTANCES_JSON.')\n\nselected_node = normalize_selected_node({\n    'endpoint': endpoint,\n    'api_key': runtime_api_key,\n    'token': runtime_api_key,\n    'name': node_name,\n    'weight': incoming_selected_node.get('weight', 1),\n})\n\nreturn [{\n    'json': {\n        **item,\n        'pt_id': item.get('pt_id', item.get('product_type_id')),\n        'selected_acu_node': selected_node,\n        'acunetix_endpoint': endpoint,\n        'acunetix_api_key': runtime_api_key,\n        'acunetix_token': runtime_api_key,\n        'acunetix_node_name': node_name,\n        'acu_node_source': 'runtime_config',\n    }\n}]"
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ !!$json.acunetix_endpoint && !!$json.acunetix_api_key }}"
+            }
+          ]
+        }
       },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
       "position": [
         496,
         0
       ],
       "id": "c-validate-acunetix-node",
       "name": "Validate Acunetix Node"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "string": [
+            {
+              "name": "pt_id",
+              "value": "={{ $json.pt_id || $json.product_type_id }}"
+            },
+            {
+              "name": "acunetix_endpoint",
+              "value": "={{ (($json.acunetix_endpoint || $json.selected_acu_node?.endpoint || \"\").toString()).trim().replace(/\\/+$/, \"\") }}"
+            },
+            {
+              "name": "acunetix_node_name",
+              "value": "={{ (($json.acunetix_node_name || $json.selected_acu_node?.name || \"acu-selected\").toString()).trim() || \"acu-selected\" }}"
+            },
+            {
+              "name": "acunetix_api_key",
+              "value": "={{ (($json.selected_acu_node?.api_key || $json.selected_acu_node?.token || \"\").toString()).trim() }}"
+            },
+            {
+              "name": "acunetix_token",
+              "value": "={{ (($json.selected_acu_node?.api_key || $json.selected_acu_node?.token || \"\").toString()).trim() }}"
+            }
+          ],
+          "object": [
+            {
+              "name": "selected_acu_node",
+              "value": {
+                "endpoint": "={{ $json.acunetix_endpoint || $json.selected_acu_node?.endpoint || \"\" }}",
+                "name": "={{ $json.acunetix_node_name || $json.selected_acu_node?.name || \"acu-selected\" }}",
+                "api_key": "={{ $json.selected_acu_node?.api_key || $json.selected_acu_node?.token || \"\" }}",
+                "token": "={{ $json.selected_acu_node?.api_key || $json.selected_acu_node?.token || \"\" }}",
+                "weight": "={{ $json.selected_acu_node?.weight || 1 }}"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c-normalize-acunetix-node",
+      "name": "Normalize Acunetix Node",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "message": "=product_type_id must be a positive integer, got: {{$json.product_type_id}}"
+      },
+      "id": "c-error-product-type-id",
+      "name": "Invalid product_type_id",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        500,
+        180
+      ]
+    },
+    {
+      "parameters": {
+        "message": "=WF_C_Targets_For_PT requires acunetix_endpoint and selected_acu_node api_key/token in input payload."
+      },
+      "id": "c-error-acu-node",
+      "name": "Invalid Acunetix Node Input",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        920,
+        180
+      ]
     }
   ],
   "pinData": {},
@@ -192,7 +278,14 @@
       "main": [
         [
           {
-            "node": "Validate Acunetix Node",
+            "node": "Normalize Acunetix Node",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid product_type_id",
             "type": "main",
             "index": 0
           }
@@ -204,6 +297,24 @@
         [
           {
             "node": "Execute Command",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Acunetix Node Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Acunetix Node": {
+      "main": [
+        [
+          {
+            "node": "Validate Acunetix Node",
             "type": "main",
             "index": 0
           }
