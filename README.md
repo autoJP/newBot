@@ -29,6 +29,7 @@
 
 - Основные переменные: `ACUNETIX_BASE_URL`, `ACUNETIX_API_KEY`.
 - На переходный период сохранена обратная совместимость: если `ACUNETIX_API_KEY` пустой, workflow/скрипты читают legacy-ключ `ACU_API_TOKEN`.
+- В `WF_D_PT_AcunetixScan` и `WF_D_ProductScan` добавлена ранняя валидация: при пустом токене stage завершается с диагностикой и **не** отправляет запросы с пустым `X-Auth`.
 - Для base URL также поддерживается legacy-алиас `ACU_BASE_URL`, но рекомендуется использовать только `ACUNETIX_BASE_URL`.
 
 > Рекомендуется загружать этот `.env` в окружение n8n/контейнера n8n, чтобы все workflow и скрипты видели одинаковые значения.
@@ -169,7 +170,7 @@ PT_STATE_JSON_END
 
 Для распределения scan job между несколькими Acunetix-инстансами используйте переменные:
 
-> Если `ACUNETIX_API_KEY` не задан, fallback идёт на legacy `ACU_API_TOKEN` (переходный режим).
+> Если `ACUNETIX_API_KEY` не задан, fallback идёт на legacy `ACU_API_TOKEN` (временный переходный режим).
 
 - `ACUNETIX_MAX_SCANS_PER_NODE` — глобальный лимит активных сессий на ноду (по умолчанию `5`).
 - `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional), `weight` (optional, для policy `weighted`).
@@ -183,7 +184,7 @@ ACUNETIX_MAX_SCANS_PER_NODE=5
 ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","token":"token1","max_scans_per_node":8},{"name":"acu-2","endpoint":"https://acu-2.local:3443","token":"token2"}]
 ```
 
-`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты.
+`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Если API-ключ отсутствует (включая пустые/битые `ACUNETIX_INSTANCES_JSON` без token), workflow завершает stage явной ошибкой конфигурации.
 
 Политика диспетчеризации:
 
@@ -195,7 +196,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 `WF_Dojo_Master` пишет policy snapshot в PT-state (`acu_dispatch_policy`) при переводе PT в `acu_running`, а также пробрасывает policy в `queue_wf_d_pt_acunetixscan`/итог плана.
 
-`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job.
+`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job. В начале stage выполняется явная проверка endpoint/API-key; при пустом токене выполнение останавливается с диагностикой.
 
 ### Явные payload для `executeWorkflow`
 

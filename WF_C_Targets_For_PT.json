@@ -26,7 +26,7 @@
             },
             {
               "name": "acunetix_token",
-              "value": "={{ $json.acunetix_token || $json.selected_acu_node?.token || '' }}"
+              "value": "={{ $json.acunetix_api_key || $json.acunetix_token || $json.selected_acu_node?.token || '' }}"
             },
             {
               "name": "acunetix_node_name",
@@ -115,7 +115,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = $json\n\nendpoint = (item.get('acunetix_endpoint') or '').strip()\ntoken = (item.get('acunetix_token') or '').strip()\nnode_name = (item.get('acunetix_node_name') or '').strip()\n\nif not endpoint:\n    raise Exception('acunetix_endpoint is required. Pass selected node endpoint from orchestrator/dispatcher.')\nif not token:\n    raise Exception('acunetix_token is required. Pass selected node token from orchestrator/dispatcher.')\n\nselected_node = {\n    'endpoint': endpoint,\n    'token': token,\n    'name': node_name or 'acu-selected',\n}\n\nreturn [{\n    'json': {\n        **item,\n        'pt_id': item.get('pt_id', item.get('product_type_id')),\n        'selected_acu_node': selected_node,\n        'acunetix_endpoint': endpoint,\n        'acunetix_token': token,\n        'acunetix_node_name': selected_node['name'],\n    }\n}]"
+        "pythonCode": "item = $json\n\nendpoint = (item.get('acunetix_endpoint') or '').strip()\ntoken = (item.get('acunetix_api_key') or item.get('acunetix_token') or '').strip()\nnode_name = (item.get('acunetix_node_name') or '').strip()\n\nif not endpoint:\n    raise Exception('acunetix_endpoint is required. Pass selected node endpoint from orchestrator/dispatcher.')\nif not token:\n    raise Exception('acunetix_token is required. Pass selected node token from orchestrator/dispatcher.')\n\nselected_node = {\n    'endpoint': endpoint,\n    'token': token,\n    'name': node_name or 'acu-selected',\n}\n\nreturn [{\n    'json': {\n        **item,\n        'pt_id': item.get('pt_id', item.get('product_type_id')),\n        'selected_acu_node': selected_node,\n        'acunetix_endpoint': endpoint,\n        'acunetix_api_key': token,\n        'acunetix_token': token,\n        'acunetix_node_name': selected_node['name'],\n    }\n}]"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
