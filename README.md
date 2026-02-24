@@ -21,6 +21,7 @@
    - `NMAP_XML_DIR`
    - `N8N_*`
    - `SUBDOMAINS_CONCURRENCY`, `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES`, `NMAP_CONCURRENCY`, `PT_WINDOW_SIZE`
+- `PT_LOCK_TTL_MINUTES`, `PT_RETRY_SUBDOMAINS_MAX`, `PT_RETRY_NMAP_MAX`, `PT_RETRY_TARGETS_MAX`, `PT_RETRY_ACU_MAX`
 
 > Рекомендуется загружать этот `.env` в окружение n8n/контейнера n8n, чтобы все workflow и скрипты видели одинаковые значения.
 
@@ -102,6 +103,7 @@
 Оркестратор (`WF_Dojo_Master`) использует лимиты из `.env`:
 
 - `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных PT в `subdomains_running`.
+- `PT_LOCK_TTL_MINUTES` — TTL блокировки PT-state (`lock_owner`, `lock_until`) для защиты от дублей при параллельных trigger.
 - `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES` — TTL для зависших PT в `subdomains_running`; при истечении PT переводится в `error` для автоматического восстановления после рестарта.
 - `NMAP_CONCURRENCY` — ограничение количества Product-задач в этапе nmap за проход.
 - `PT_WINDOW_SIZE` — сколько PT анализируется за проход планировщика.
@@ -145,6 +147,8 @@ PT_STATE_JSON_END
 - `last_update` — время последнего обновления (ISO8601, UTC)
 - `retry_count` — число ретраев
 - `last_error` — последняя ошибка (строка или `null`)
+- `last_stage` — последняя стадия, для stage-based retry policy
+- `lock_owner`, `lock_until` — временная блокировка PT-state для идемпотентных trigger
 - `acu_dispatch_policy` — политика диспетчеризации Acunetix для PT в состоянии `acu_running` (`fairness`, `node_selection`, `sticky_assignment`)
 
 Если в `description` есть произвольный текст, он сохраняется, а state-блок обновляется/пере-записывается отдельно внизу.
@@ -179,3 +183,15 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 `WF_Dojo_Master` пишет policy snapshot в PT-state (`acu_dispatch_policy`) при переводе PT в `acu_running`, а также пробрасывает policy в `queue_wf_d_pt_acunetixscan`/итог плана.
 
 `WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job.
+
+
+### Retry policy по стадиям
+
+`WF_Dojo_Master` учитывает stage-based лимиты ретраев:
+
+- `PT_RETRY_SUBDOMAINS_MAX`
+- `PT_RETRY_NMAP_MAX`
+- `PT_RETRY_TARGETS_MAX`
+- `PT_RETRY_ACU_MAX`
+
+Если PT находится в `error` и `retry_count` достиг лимита для `last_stage`, PT больше не ставится в очередь автоматически до ручного вмешательства/сброса состояния. Ошибки Nmap переводятся в `error` с диагностикой (`last_error`).
