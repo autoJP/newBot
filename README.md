@@ -195,3 +195,55 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 - `PT_RETRY_ACU_MAX`
 
 Если PT находится в `error` и `retry_count` достиг лимита для `last_stage`, PT больше не ставится в очередь автоматически до ручного вмешательства/сброса состояния. Ошибки Nmap переводятся в `error` с диагностикой (`last_error`).
+
+## Операционная памятка (новые параметры и восстановление)
+
+### Новые `.env` параметры для health/reporting
+
+- `PT_HEALTH_WINDOW_SIZE` — сколько Product Type анализируется в `WF_E_System_Health` за один запуск (по умолчанию `300`).
+- `HEALTH_MAX_LOG_EVENTS` — лимит массива `log_events` в health-отчете (по умолчанию `500`).
+
+### Что теперь показывает `WF_E_System_Health`
+
+- `pt_state_counts` — агрегированное количество PT по состояниям (`new`, `subdomains_running`, `subdomains_done`, `nmap_running`, `nmap_done`, `targets_ready`, `acu_running`, `done`, `error`).
+- `queue_status` — оценка очередей по этапам:
+  - `subdomains`: PT в `new`/`error`;
+  - `nmap`: PT в `subdomains_done`/`nmap_running`;
+  - `acu`: PT в `targets_ready`/`acu_running`.
+- `active_slots` — текущие активные PT по running-этапам (`subdomains_running`, `nmap_running`, `acu_running`).
+- `node_errors` — ошибки внешних сервисов и Acunetix-нод.
+- `pt_errors` — ошибки PT из state-блока (`last_stage` + `last_error`).
+
+### Единый формат log-событий
+
+Во всех итоговых отчетах/диспетчеризации, где доступны события, используется единый формат:
+
+```json
+{
+  "pt_id": 123,
+  "stage": "acu_dispatch",
+  "job_id": "456",
+  "server": "acu-1",
+  "status": "queued",
+  "duration": null
+}
+```
+
+Поля:
+- `pt_id` — идентификатор Product Type (или `null` для системных событий),
+- `stage` — стадия (`health_*`, `acu_pool_probe`, `acu_dispatch`, `subdomains`, `nmap`, `targets`, `acu`),
+- `job_id` — идентификатор задачи/события,
+- `server` — узел/инстанс/источник,
+- `status` — `ok` / `queued` / `error`,
+- `duration` — длительность (если доступна), иначе `null`.
+
+### Процедура восстановления после ошибок
+
+1. Запустить `WF_E_System_Health` и проверить блоки `critical`, `node_errors`, `pt_errors`.
+2. Если есть `dojo_unavailable`/`n8n_unavailable`/ошибки Acunetix-ноды — сначала восстановить инфраструктуру/credentials.
+3. Для PT в `error`:
+   - проверить `last_stage`, `last_error`, `retry_count` в `product_type.description`;
+   - устранить причину (скрипт subdomains/nmap, доступ к Dojo/Acunetix, лимиты);
+   - при необходимости вручную сбросить state в `new` или на предыдущий валидный этап.
+4. Повторно запустить `WF_Dojo_Master`.
+5. Контролировать, что PT переходят по цепочке `subdomains_running -> subdomains_done -> nmap_running -> nmap_done -> targets_ready -> acu_running -> done` без повторного возврата в `error`.
