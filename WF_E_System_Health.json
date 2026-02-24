@@ -70,7 +70,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "from datetime import datetime, timezone\n\nnow = datetime.now(timezone.utc).isoformat()\n\nservices = [\n    ('dojo', 'Check Dojo', [(200, 299)]),\n    ('acunetix', 'Check Acunetix Node', [(200, 299)]),\n    ('n8n', 'Check n8n', [(200, 299)]),\n]\n\ndef status_in_ranges(status_code, ranges):\n    if status_code is None:\n        return False\n    for low, high in ranges:\n        if low <= status_code <= high:\n            return True\n    return False\n\nreport = {}\ncritical = []\n\nfor service_name, node_name, expected_ranges in services:\n    node_data = $node[node_name].json if $node[node_name].json else {}\n    status_code = node_data.get('statusCode')\n    ok = status_in_ranges(status_code, expected_ranges)\n\n    error_message = None\n    if status_code is None:\n        error_message = 'no_status_code_returned'\n    elif not ok:\n        error_message = f'unexpected_status_code:{status_code}'\n\n    report[service_name] = {\n        'ok': ok,\n        'status_code': status_code,\n        'error_message': error_message,\n        'checked_at': now,\n    }\n\n    if not ok:\n        critical.append(f'{service_name}_unavailable')\n\nreturn [{\n  'json': {\n    **report,\n    'critical': critical,\n    'has_critical': len(critical) > 0,\n    'checked_at': now,\n  }\n}]"
+        "pythonCode": "from datetime import datetime, timezone\nimport json\nimport os\nimport re\nimport urllib.request\n\nnow = datetime.now(timezone.utc).isoformat()\nBLOCK_START = 'PT_STATE_JSON_START'\nBLOCK_END = 'PT_STATE_JSON_END'\nVALID_STATES = {'new','subdomains_running','subdomains_done','nmap_running','nmap_done','targets_ready','acu_running','done','error'}\n\n\ndef status_in_ranges(status_code, ranges):\n    if status_code is None:\n        return False\n    for low, high in ranges:\n        if low <= status_code <= high:\n            return True\n    return False\n\n\ndef parse_state(description):\n    if not isinstance(description, str):\n        return {}\n    m = re.search(rf\"{BLOCK_START}\\n(.*?)\\n{BLOCK_END}\", description, re.DOTALL)\n    if not m:\n        return {}\n    try:\n        payload = json.loads(m.group(1).strip())\n        return payload if isinstance(payload, dict) else {}\n    except Exception:\n        return {}\n\n\ndef to_results(node_name):\n    data = $node[node_name].json if $node[node_name].json else {}\n    if isinstance(data, dict):\n        return data\n    return {}\n\n\ndef fetch_next_pages(initial_next):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not initial_next or not token:\n        return []\n    out = []\n    visited = set()\n    current = str(initial_next)\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=20) as resp:\n            payload = json.loads((resp.read() or b'{}').decode('utf-8'))\n        out.extend(payload.get('results') or [])\n        current = payload.get('next')\n    return out\n\nservices = [\n    ('dojo', 'Check Dojo', [(200, 299)]),\n    ('acunetix', 'Check Acunetix Node', [(200, 299)]),\n    ('n8n', 'Check n8n', [(200, 299)]),\n]\n\nreport = {}\ncritical = []\nlog_events = []\nnode_errors = []\n\nfor service_name, node_name, expected_ranges in services:\n    node_data = to_results(node_name)\n    status_code = node_data.get('statusCode')\n    ok = status_in_ranges(status_code, expected_ranges)\n    error_message = None\n    if status_code is None:\n        error_message = 'no_status_code_returned'\n    elif not ok:\n        error_message = f'unexpected_status_code:{status_code}'\n    report[service_name] = {\n        'ok': ok,\n        'status_code': status_code,\n        'error_message': error_message,\n        'checked_at': now,\n    }\n    log_events.append({\n        'pt_id': None,\n        'stage': f'health_{service_name}',\n        'job_id': service_name,\n        'server': service_name,\n        'status': 'ok' if ok else 'error',\n        'duration': None,\n    })\n    if not ok:\n        critical.append(f'{service_name}_unavailable')\n        node_errors.append({'node': service_name, 'error': error_message})\n\nacu_data = to_results('Check Acunetix Node')\nfor n in acu_data.get('nodes', []) or []:\n    if not n.get('ok'):\n        node_errors.append({'node': n.get('name'), 'error': f\"statusCode:{n.get('statusCode')}\"})\n    log_events.append({\n        'pt_id': None,\n        'stage': 'acu_node_health',\n        'job_id': n.get('name'),\n        'server': n.get('endpoint') or n.get('name'),\n        'status': 'ok' if n.get('ok') else 'error',\n        'duration': None,\n    })\n\npt_payload = to_results('Get PT States')\nproduct_types = list(pt_payload.get('results') or [])\nproduct_types.extend(fetch_next_pages(pt_payload.get('next')))\npt_window = int(os.environ.get('PT_HEALTH_WINDOW_SIZE', '300') or 300)\nproduct_types = product_types[:max(1, pt_window)]\n\nstate_counts = {state: 0 for state in VALID_STATES}\nqueues = {'subdomains': 0, 'nmap': 0, 'acu': 0}\nactive_slots = {'subdomains': 0, 'nmap': 0, 'acu': 0}\npt_errors = []\n\nfor pt in product_types:\n    pt_id = pt.get('id')\n    state_obj = parse_state(pt.get('description', ''))\n    state = str(state_obj.get('state') or 'new')\n    if state not in VALID_STATES:\n        state = 'new'\n    state_counts[state] = state_counts.get(state, 0) + 1\n\n    if state in {'new', 'error'}:\n        queues['subdomains'] += 1\n    if state in {'subdomains_done', 'nmap_running'}:\n        queues['nmap'] += 1\n    if state in {'targets_ready', 'acu_running'}:\n        queues['acu'] += 1\n\n    if state == 'subdomains_running':\n        active_slots['subdomains'] += 1\n    if state == 'nmap_running':\n        active_slots['nmap'] += 1\n    if state == 'acu_running':\n        active_slots['acu'] += 1\n\n    if state == 'error':\n        err = str(state_obj.get('last_error') or 'unknown_error')\n        stage = str(state_obj.get('last_stage') or 'unknown_stage')\n        pt_errors.append({'pt_id': pt_id, 'stage': stage, 'error': err})\n        log_events.append({\n            'pt_id': pt_id,\n            'stage': stage,\n            'job_id': f'pt:{pt_id}',\n            'server': 'dojo:pt_state',\n            'status': 'error',\n            'duration': None,\n        })\n\nmax_events = int(os.environ.get('HEALTH_MAX_LOG_EVENTS', '500') or 500)\nif max_events > 0:\n    log_events = log_events[:max_events]\n\nreturn [{\n  'json': {\n    **report,\n    'critical': critical,\n    'has_critical': len(critical) > 0,\n    'checked_at': now,\n    'pt_window_size': pt_window,\n    'pt_state_counts': state_counts,\n    'queue_status': queues,\n    'active_slots': active_slots,\n    'pt_errors': pt_errors,\n    'node_errors': node_errors,\n    'log_events': log_events,\n  }\n}]"
       },
       "id": "h-report",
       "name": "Build Unified Report (Python)",
@@ -116,6 +116,30 @@
         340,
         100
       ]
+    },
+    {
+      "parameters": {
+        "authentication": "headerAuth",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/product_types/?limit=200&offset=0' }}",
+        "options": {
+          "ignoreHttpStatusErrors": true,
+          "fullResponse": true
+        }
+      },
+      "id": "h-pt-states",
+      "name": "Get PT States",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        -760,
+        340
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
     }
   ],
   "connections": {
@@ -134,7 +158,7 @@
       "main": [
         [
           {
-            "node": "Check Acunetix Node",
+            "node": "Get PT States",
             "type": "main",
             "index": 0
           }
@@ -184,6 +208,17 @@
           }
         ],
         []
+      ]
+    },
+    "Get PT States": {
+      "main": [
+        [
+          {
+            "node": "Check Acunetix Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     }
   },
