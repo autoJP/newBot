@@ -35,12 +35,20 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "return [{\"json\": {\"pool_probe\": \"started\"}}]"
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "pool_probe",
+              "value": "started"
+            }
+          ]
+        },
+        "options": {}
       },
       "id": "d-acu-scans",
       "name": "Get Active Acunetix Scans",
-      "type": "n8n-nodes-base.code",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
       "position": [
         -760,
@@ -84,13 +92,14 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "out = []\nfor row in $json.get('dispatch_items', []):\n    if not isinstance(row, dict):\n        continue\n    out.append({'json': {\n        'pt_id': row.get('pt_id', row.get('product_type_id')),\n        'product_id': row.get('product_id'),\n        'product_name': row.get('product_name'),\n        'product_type_id': row.get('product_type_id'),\n        'domain': row.get('domain'),\n        'stage': row.get('stage', 'acu'),\n        'target_id': row.get('target_id') or row.get('acunetix_target_id'),\n        'acunetix_target_id': row.get('acunetix_target_id') or row.get('target_id'),\n        'job_metadata': row.get('job_metadata', {}),\n        'selected_acu_node': row.get('selected_acu_node'),\n        'acunetix_node_name': row.get('acunetix_node_name'),\n        'acunetix_endpoint': row.get('acunetix_endpoint'),\n        'acunetix_api_key': row.get('acunetix_api_key', row.get('acunetix_token')),\n        'acunetix_token': row.get('acunetix_token', row.get('acunetix_api_key')),\n\n        'tag_signals': row.get('tag_signals', {}),\n        'requires_target_resync': bool(row.get('requires_target_resync')),\n        'resync_reason': row.get('resync_reason'),\n        'previous_selected_acu_node': row.get('previous_selected_acu_node'),\n    }})\nreturn out"
+        "operation": "splitOut",
+        "fieldToSplitOut": "dispatch_items",
+        "options": {}
       },
       "id": "d-expand",
-      "name": "Expand Dispatch Items",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Expand Dispatch Items (Items)",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
       "position": [
         -120,
         80
@@ -162,6 +171,96 @@
         540,
         300
       ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "pt_id",
+              "value": "={{$json.pt_id ?? $json.product_type_id}}"
+            },
+            {
+              "name": "product_id",
+              "value": "={{$json.product_id}}"
+            },
+            {
+              "name": "product_name",
+              "value": "={{$json.product_name}}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{$json.product_type_id}}"
+            },
+            {
+              "name": "domain",
+              "value": "={{$json.domain}}"
+            },
+            {
+              "name": "stage",
+              "value": "={{$json.stage || 'acu'}}"
+            },
+            {
+              "name": "target_id",
+              "value": "={{$json.target_id ?? $json.acunetix_target_id}}"
+            },
+            {
+              "name": "acunetix_target_id",
+              "value": "={{$json.acunetix_target_id ?? $json.target_id}}"
+            },
+            {
+              "name": "job_metadata",
+              "value": "={{$json.job_metadata ?? {}}}"
+            },
+            {
+              "name": "selected_acu_node",
+              "value": "={{$json.selected_acu_node}}"
+            },
+            {
+              "name": "acunetix_node_name",
+              "value": "={{$json.acunetix_node_name}}"
+            },
+            {
+              "name": "acunetix_endpoint",
+              "value": "={{$json.acunetix_endpoint}}"
+            },
+            {
+              "name": "acunetix_api_key",
+              "value": "={{$json.acunetix_api_key ?? $json.acunetix_token}}"
+            },
+            {
+              "name": "acunetix_token",
+              "value": "={{$json.acunetix_token ?? $json.acunetix_api_key}}"
+            },
+            {
+              "name": "tag_signals",
+              "value": "={{$json.tag_signals ?? {}}}"
+            },
+            {
+              "name": "requires_target_resync",
+              "value": "={{!!$json.requires_target_resync}}"
+            },
+            {
+              "name": "resync_reason",
+              "value": "={{$json.resync_reason}}"
+            },
+            {
+              "name": "previous_selected_acu_node",
+              "value": "={{$json.previous_selected_acu_node}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-dispatch-item",
+      "name": "Map Dispatch Item",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -30,
+        200
+      ]
     }
   ],
   "connections": {
@@ -213,23 +312,12 @@
       "main": [
         [
           {
-            "node": "Expand Dispatch Items",
+            "node": "Expand Dispatch Items (Items)",
             "type": "main",
             "index": 0
           }
         ],
         []
-      ]
-    },
-    "Expand Dispatch Items": {
-      "main": [
-        [
-          {
-            "node": "Needs target resync?",
-            "type": "main",
-            "index": 0
-          }
-        ]
       ]
     },
     "Needs target resync?": {
@@ -266,6 +354,28 @@
         [
           {
             "node": "Run WF_D_ProductScan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand Dispatch Items (Items)": {
+      "main": [
+        [
+          {
+            "node": "Map Dispatch Item",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map Dispatch Item": {
+      "main": [
+        [
+          {
+            "node": "Needs target resync?",
             "type": "main",
             "index": 0
           }

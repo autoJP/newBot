@@ -222,13 +222,14 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "first_item = _input.first()\npayload = first_item.json if first_item else None\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\ndef to_container(value):\n    if value is None:\n        return {}\n    if isinstance(value, list):\n        return value[0] if value else {}\n    try:\n        first = value[0]\n        if hasattr(first, 'get') or hasattr(first, '__getitem__'):\n            return first\n    except Exception:\n        pass\n    return value\n\ndef is_mapping_like(value):\n    return hasattr(value, 'get') or hasattr(value, '__getitem__')\n\nincoming = to_container(payload)\nout = []\nfor row in to_list(read_key(incoming, 'queue_wf_a_subdomains_pt', [])):\n    if not is_mapping_like(row):\n        continue\n    item = {}\n    item['pt_id'] = read_key(row, 'pt_id', read_key(row, 'product_type_id'))\n    item['product_type_id'] = read_key(row, 'product_type_id')\n    item['product_type_name'] = read_key(row, 'product_type_name')\n    item['domain'] = read_key(row, 'domain')\n    item['stage'] = read_key(row, 'stage', 'subdomains')\n    item['job_metadata'] = read_key(row, 'job_metadata', {})\n    out.append({'json': item})\nreturn out"
+        "operation": "splitOut",
+        "fieldToSplitOut": "queue_wf_a_subdomains_pt",
+        "options": {}
       },
       "id": "m-expand-a",
-      "name": "Expand WF_A Candidates (Python)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Expand WF_A Candidates (Items)",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
       "position": [
         -660,
         20
@@ -236,13 +237,14 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "first_item = _input.first()\npayload = first_item.json if first_item else None\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\ndef to_container(value):\n    if value is None:\n        return {}\n    if isinstance(value, list):\n        return value[0] if value else {}\n    try:\n        first = value[0]\n        if hasattr(first, 'get') or hasattr(first, '__getitem__'):\n            return first\n    except Exception:\n        pass\n    return value\n\ndef is_mapping_like(value):\n    return hasattr(value, 'get') or hasattr(value, '__getitem__')\n\nincoming = to_container(payload)\nout = []\nfor row in to_list(read_key(incoming, 'queue_wf_b_nmap_product', [])):\n    if not is_mapping_like(row):\n        continue\n    item = {}\n    item['pt_id'] = read_key(row, 'pt_id', read_key(row, 'product_type_id'))\n    item['product_id'] = read_key(row, 'product_id')\n    item['product_name'] = read_key(row, 'product_name')\n    item['product_type_id'] = read_key(row, 'product_type_id')\n    item['product_type_name'] = read_key(row, 'product_type_name')\n    item['domain'] = read_key(row, 'domain')\n    item['stage'] = read_key(row, 'stage', 'nmap')\n    item['job_metadata'] = read_key(row, 'job_metadata', {})\n    item['nmap_total'] = read_key(row, 'nmap_total')\n    item['nmap_done_initial'] = read_key(row, 'nmap_done_initial')\n    item['nmap_failed_initial'] = read_key(row, 'nmap_failed_initial')\n    item['nmap_state_description'] = read_key(row, 'nmap_state_description')\n    out.append({'json': item})\nreturn out"
+        "operation": "splitOut",
+        "fieldToSplitOut": "queue_wf_b_nmap_product",
+        "options": {}
       },
       "id": "m-expand-b",
-      "name": "Expand WF_B Candidates (Python)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Expand WF_B Candidates (Items)",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
       "position": [
         -240,
         20
@@ -250,13 +252,14 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "first_item = _input.first()\npayload = first_item.json if first_item else None\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\ndef to_container(value):\n    if value is None:\n        return {}\n    if isinstance(value, list):\n        return value[0] if value else {}\n    try:\n        first = value[0]\n        if hasattr(first, 'get') or hasattr(first, '__getitem__'):\n            return first\n    except Exception:\n        pass\n    return value\n\ndef is_mapping_like(value):\n    return hasattr(value, 'get') or hasattr(value, '__getitem__')\n\nincoming = to_container(payload)\nout = []\nfor row in to_list(read_key(incoming, 'queue_wf_c_targets_for_pt', [])):\n    if not is_mapping_like(row):\n        continue\n    item = {}\n    item['pt_id'] = read_key(row, 'pt_id', read_key(row, 'product_type_id'))\n    item['product_type_id'] = read_key(row, 'product_type_id')\n    item['product_type_name'] = read_key(row, 'product_type_name')\n    item['domain'] = read_key(row, 'domain')\n    item['stage'] = read_key(row, 'stage', 'targets')\n    item['job_metadata'] = read_key(row, 'job_metadata', {})\n    item['selected_acu_node'] = read_key(row, 'selected_acu_node')\n    item['acunetix_node_name'] = read_key(row, 'acunetix_node_name')\n    item['acunetix_endpoint'] = read_key(row, 'acunetix_endpoint')\n    out.append({'json': item})\nreturn out"
+        "operation": "splitOut",
+        "fieldToSplitOut": "queue_wf_c_targets_for_pt",
+        "options": {}
       },
       "id": "m-expand-c",
-      "name": "Expand WF_C Candidates (Python)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Expand WF_C Candidates (Items)",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
       "position": [
         160,
         20
@@ -264,13 +267,14 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "first_item = _input.first()\npayload = first_item.json if first_item else None\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\ndef to_container(value):\n    if value is None:\n        return {}\n    if isinstance(value, list):\n        return value[0] if value else {}\n    try:\n        first = value[0]\n        if hasattr(first, 'get') or hasattr(first, '__getitem__'):\n            return first\n    except Exception:\n        pass\n    return value\n\ndef is_mapping_like(value):\n    return hasattr(value, 'get') or hasattr(value, '__getitem__')\n\nincoming = to_container(payload)\nout = []\nfor row in to_list(read_key(incoming, 'queue_wf_d_pt_acunetixscan', [])):\n    if not is_mapping_like(row):\n        continue\n    item = {}\n    item['pt_id'] = read_key(row, 'pt_id', read_key(row, 'product_type_id'))\n    item['product_type_id'] = read_key(row, 'product_type_id')\n    item['product_type_name'] = read_key(row, 'product_type_name')\n    item['domain'] = read_key(row, 'domain')\n    item['stage'] = read_key(row, 'stage', 'acu')\n    item['job_metadata'] = read_key(row, 'job_metadata', {})\n    item['dispatch_policy'] = read_key(row, 'dispatch_policy', {})\n    item['selected_acu_node'] = read_key(row, 'selected_acu_node')\n    out.append({'json': item})\nreturn out"
+        "operation": "splitOut",
+        "fieldToSplitOut": "queue_wf_d_pt_acunetixscan",
+        "options": {}
       },
       "id": "m-expand-d",
-      "name": "Expand WF_D Candidates (Python)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Expand WF_D Candidates (Items)",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
       "position": [
         560,
         20
@@ -278,12 +282,20 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "first_item = _input.first()\nitem = first_item.json if first_item else {}\nif not isinstance(item, dict):\n    item = {}\nreturn [{'json': {'trigger': item}}]"
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "trigger",
+              "value": "={{$json}}"
+            }
+          ]
+        },
+        "options": {}
       },
       "id": "m-prepare-trigger",
-      "name": "Prepare Trigger Input (Python)",
-      "type": "n8n-nodes-base.code",
+      "name": "Prepare Trigger Input",
+      "type": "n8n-nodes-base.set",
       "typeVersion": 2,
       "position": [
         -1170,
@@ -464,13 +476,14 @@
     },
     {
       "parameters": {
-        "language": "python",
-        "pythonCode": "first_item = _input.first()\npayload = first_item.json if first_item else {}\nupdates = payload.get('state_updates') if isinstance(payload, dict) else []\nif not isinstance(updates, list):\n    updates = []\nout = []\nfor u in updates:\n    if not isinstance(u, dict):\n        continue\n    pt_id = u.get('product_type_id')\n    desc = u.get('description')\n    if pt_id is None or desc is None:\n        continue\n    out.append({'json': {'product_type_id': pt_id, 'description': desc}})\nreturn out"
+        "operation": "splitOut",
+        "fieldToSplitOut": "state_updates",
+        "options": {}
       },
       "id": "m-expand-state-updates",
-      "name": "Expand PT State Updates (Python)",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
+      "name": "Expand PT State Updates",
+      "type": "n8n-nodes-base.itemLists",
+      "typeVersion": 3,
       "position": [
         -520,
         220
@@ -587,6 +600,268 @@
         500,
         300
       ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "pt_id",
+              "value": "={{$json.pt_id ?? $json.product_type_id}}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{$json.product_type_id}}"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={{$json.product_type_name}}"
+            },
+            {
+              "name": "domain",
+              "value": "={{$json.domain}}"
+            },
+            {
+              "name": "stage",
+              "value": "={{$json.stage || 'subdomains'}}"
+            },
+            {
+              "name": "job_metadata",
+              "value": "={{$json.job_metadata ?? {}}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-m-expand-a",
+      "name": "Map WF_A Candidate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -660,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "pt_id",
+              "value": "={{$json.pt_id ?? $json.product_type_id}}"
+            },
+            {
+              "name": "product_id",
+              "value": "={{$json.product_id}}"
+            },
+            {
+              "name": "product_name",
+              "value": "={{$json.product_name}}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{$json.product_type_id}}"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={{$json.product_type_name}}"
+            },
+            {
+              "name": "domain",
+              "value": "={{$json.domain}}"
+            },
+            {
+              "name": "stage",
+              "value": "={{$json.stage || 'nmap'}}"
+            },
+            {
+              "name": "job_metadata",
+              "value": "={{$json.job_metadata ?? {}}}"
+            },
+            {
+              "name": "nmap_total",
+              "value": "={{$json.nmap_total}}"
+            },
+            {
+              "name": "nmap_done_initial",
+              "value": "={{$json.nmap_done_initial}}"
+            },
+            {
+              "name": "nmap_failed_initial",
+              "value": "={{$json.nmap_failed_initial}}"
+            },
+            {
+              "name": "nmap_state_description",
+              "value": "={{$json.nmap_state_description}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-m-expand-b",
+      "name": "Map WF_B Candidate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -240,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "pt_id",
+              "value": "={{$json.pt_id ?? $json.product_type_id}}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{$json.product_type_id}}"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={{$json.product_type_name}}"
+            },
+            {
+              "name": "domain",
+              "value": "={{$json.domain}}"
+            },
+            {
+              "name": "stage",
+              "value": "={{$json.stage || 'targets'}}"
+            },
+            {
+              "name": "job_metadata",
+              "value": "={{$json.job_metadata ?? {}}}"
+            },
+            {
+              "name": "selected_acu_node",
+              "value": "={{$json.selected_acu_node}}"
+            },
+            {
+              "name": "acunetix_node_name",
+              "value": "={{$json.acunetix_node_name}}"
+            },
+            {
+              "name": "acunetix_endpoint",
+              "value": "={{$json.acunetix_endpoint}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-m-expand-c",
+      "name": "Map WF_C Candidate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        160,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "pt_id",
+              "value": "={{$json.pt_id ?? $json.product_type_id}}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{$json.product_type_id}}"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={{$json.product_type_name}}"
+            },
+            {
+              "name": "domain",
+              "value": "={{$json.domain}}"
+            },
+            {
+              "name": "stage",
+              "value": "={{$json.stage || 'acu'}}"
+            },
+            {
+              "name": "job_metadata",
+              "value": "={{$json.job_metadata ?? {}}}"
+            },
+            {
+              "name": "dispatch_policy",
+              "value": "={{$json.dispatch_policy ?? {}}}"
+            },
+            {
+              "name": "selected_acu_node",
+              "value": "={{$json.selected_acu_node}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-m-expand-d",
+      "name": "Map WF_D Candidate",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        560,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.product_type_id}}",
+              "operation": "notEmpty"
+            },
+            {
+              "value1": "={{$json.description}}",
+              "operation": "notEmpty"
+            }
+          ]
+        }
+      },
+      "id": "if-pt-state",
+      "name": "PT State Update Complete?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -340,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "product_type_id",
+              "value": "={{$json.product_type_id}}"
+            },
+            {
+              "name": "description",
+              "value": "={{$json.description}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "set-pt-state",
+      "name": "Map PT State Update",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -170,
+        220
+      ]
     }
   ],
   "connections": {
@@ -599,7 +874,7 @@
             "index": 0
           },
           {
-            "node": "Prepare Trigger Input (Python)",
+            "node": "Prepare Trigger Input",
             "type": "main",
             "index": 0
           },
@@ -626,7 +901,7 @@
       "main": [
         [
           {
-            "node": "Expand PT State Updates (Python)",
+            "node": "Expand PT State Updates",
             "type": "main",
             "index": 0
           },
@@ -642,7 +917,7 @@
       "main": [
         [
           {
-            "node": "Expand WF_A Candidates (Python)",
+            "node": "Expand WF_A Candidates (Items)",
             "type": "main",
             "index": 0
           }
@@ -676,7 +951,7 @@
       "main": [
         [
           {
-            "node": "Expand WF_B Candidates (Python)",
+            "node": "Expand WF_B Candidates (Items)",
             "type": "main",
             "index": 0
           }
@@ -705,7 +980,7 @@
       "main": [
         [
           {
-            "node": "Expand WF_C Candidates (Python)",
+            "node": "Expand WF_C Candidates (Items)",
             "type": "main",
             "index": 0
           }
@@ -734,7 +1009,7 @@
       "main": [
         [
           {
-            "node": "Expand WF_D Candidates (Python)",
+            "node": "Expand WF_D Candidates (Items)",
             "type": "main",
             "index": 0
           }
@@ -753,50 +1028,6 @@
         ]
       ]
     },
-    "Expand WF_A Candidates (Python)": {
-      "main": [
-        [
-          {
-            "node": "Run WF_A_Subdomains_PT",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Expand WF_B Candidates (Python)": {
-      "main": [
-        [
-          {
-            "node": "Run WF_B_Nmap_Product",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Expand WF_C Candidates (Python)": {
-      "main": [
-        [
-          {
-            "node": "Run WF_C_Targets_For_PT",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Expand WF_D Candidates (Python)": {
-      "main": [
-        [
-          {
-            "node": "Run WF_D_PT_AcunetixScan",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
     "Prepare Product Types (Python)": {
       "main": [
         [
@@ -804,17 +1035,6 @@
             "node": "Merge Trigger + Product Types",
             "type": "main",
             "index": 1
-          }
-        ]
-      ]
-    },
-    "Prepare Trigger Input (Python)": {
-      "main": [
-        [
-          {
-            "node": "Merge Trigger + Product Types",
-            "type": "main",
-            "index": 0
           }
         ]
       ]
@@ -927,23 +1147,12 @@
       "main": [
         [
           {
-            "node": "Expand PT State Updates (Python)",
+            "node": "Expand PT State Updates",
             "type": "main",
             "index": 0
           },
           {
             "node": "Need WF_B_Nmap_Product?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Expand PT State Updates (Python)": {
-      "main": [
-        [
-          {
-            "node": "Patch PT State Description",
             "type": "main",
             "index": 0
           }
@@ -1007,6 +1216,139 @@
         [
           {
             "node": "Stop on PT State PATCH Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand WF_A Candidates (Items)": {
+      "main": [
+        [
+          {
+            "node": "Map WF_A Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map WF_A Candidate": {
+      "main": [
+        [
+          {
+            "node": "Run WF_A_Subdomains_PT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand WF_B Candidates (Items)": {
+      "main": [
+        [
+          {
+            "node": "Map WF_B Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map WF_B Candidate": {
+      "main": [
+        [
+          {
+            "node": "Run WF_B_Nmap_Product",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand WF_C Candidates (Items)": {
+      "main": [
+        [
+          {
+            "node": "Map WF_C Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map WF_C Candidate": {
+      "main": [
+        [
+          {
+            "node": "Run WF_C_Targets_For_PT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand WF_D Candidates (Items)": {
+      "main": [
+        [
+          {
+            "node": "Map WF_D Candidate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Map WF_D Candidate": {
+      "main": [
+        [
+          {
+            "node": "Run WF_D_PT_AcunetixScan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Trigger Input": {
+      "main": [
+        [
+          {
+            "node": "Merge Trigger + Product Types",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Expand PT State Updates": {
+      "main": [
+        [
+          {
+            "node": "PT State Update Complete?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PT State Update Complete?": {
+      "main": [
+        [
+          {
+            "node": "Map PT State Update",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Map PT State Update": {
+      "main": [
+        [
+          {
+            "node": "Patch PT State Description",
             "type": "main",
             "index": 0
           }
