@@ -33,8 +33,7 @@ from ipaddress import ip_address
 API_TIMEOUT = 30
 TARGET_BLOCK_START = "PT_ACUNETIX_TARGETS_START"
 TARGET_BLOCK_END = "PT_ACUNETIX_TARGETS_END"
-STATE_BLOCK_START = "PT_STATE_JSON_START"
-STATE_BLOCK_END = "PT_STATE_JSON_END"
+PT_STATE_OWNER = "WF_Dojo_Master.json"
 
 
 # ---------- CLI / ENV ----------
@@ -225,8 +224,8 @@ def _upsert_marked_block(text: str, block_start: str, block_end: str, body: str)
 def merge_targets_into_description(current_description: str, target_lines: List[str]) -> str:
     """
     Update only Acunetix-targets service block.
-    PT_STATE_JSON_START/PT_STATE_JSON_END block remains under WF_Dojo_Master ownership
-    and is preserved unchanged.
+    PT_STATE_JSON_START/PT_STATE_JSON_END block remains under a single owner
+    (WF_Dojo_Master.json) and is preserved unchanged.
     """
     if not target_lines:
         return current_description if isinstance(current_description, str) else ""
@@ -240,6 +239,7 @@ def merge_targets_into_description(current_description: str, target_lines: List[
 def process_single_product_type(pt_id: int) -> dict:
     summary: Dict[str, object] = {
         "product_type_id": pt_id,
+        "pt_state_owner": PT_STATE_OWNER,
         "xml_dir": XML_DIR,
         "exclude_ports": sorted(list(EXCLUDE_PORTS)),
         "dry_run": DRY_RUN,
@@ -347,15 +347,20 @@ def process_single_product_type(pt_id: int) -> dict:
             seen.add(line)
             unique_lines.append(line)
 
-    description_text = merge_targets_into_description(pt.get("description", ""), unique_lines)
+    current_description = pt.get("description", "")
+    description_text = merge_targets_into_description(current_description, unique_lines)
 
     # 7) Patch product_type.description
-    try:
-        api_patch(f"/product_types/{pt_id}/", {"description": description_text})
-        summary["updated_description"] = True
-    except requests.HTTPError as e:
+    if description_text == (current_description if isinstance(current_description, str) else ""):
         summary["updated_description"] = False
-        summary["error"] = f"failed_update_description: {e}"
+        summary["description_unchanged"] = True
+    else:
+        try:
+            api_patch(f"/product_types/{pt_id}/", {"description": description_text})
+            summary["updated_description"] = True
+        except requests.HTTPError as e:
+            summary["updated_description"] = False
+            summary["error"] = f"failed_update_description: {e}"
 
     return summary
 
