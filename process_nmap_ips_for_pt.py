@@ -9,10 +9,13 @@ Process Nmap XML for a *single* DefectDojo Product Type:
  - skip ports in EXCLUDE_PORTS (default 80,443)
  - create new Product entries only for IP:port targets that do not already exist in that product_type
  - set internet_accessible = true for created products
- - update product_type.description with unique list of Acunetix targets:
+ - merge/update a dedicated Acunetix targets block in product_type.description:
      - main domain (canonical, without www), one line
      - each internet_accessible non-IP product (canonical host without www)
      - each IP:port target as <proto>://IP:port, <product_type.name>
+
+The PT_STATE_JSON block is intentionally NOT rewritten here. State-machine workflows
+remain the only owners of PT_STATE_JSON_START/PT_STATE_JSON_END.
 
 Suitable for use from n8n via Execute Command with JSON summary on stdout.
 """
@@ -21,12 +24,17 @@ import os
 import sys
 import json
 import argparse
+import re
 from typing import List, Tuple, Set, Dict
 import requests
 import xml.etree.ElementTree as ET
 from ipaddress import ip_address
 
 API_TIMEOUT = 30
+TARGET_BLOCK_START = "PT_ACUNETIX_TARGETS_START"
+TARGET_BLOCK_END = "PT_ACUNETIX_TARGETS_END"
+STATE_BLOCK_START = "PT_STATE_JSON_START"
+STATE_BLOCK_END = "PT_STATE_JSON_END"
 
 
 # ---------- CLI / ENV ----------
@@ -194,6 +202,50 @@ def parse_nmap_xml_for_ips(filename: str, exclude_ports: Set[int]) -> List[Tuple
     return result
 
 
+def _remove_block(text: str, block_start: str, block_end: str) -> str:
+    if not text:
+        return ""
+    pattern = re.compile(rf"\n?{re.escape(block_start)}\n.*?\n{re.escape(block_end)}\n?", re.DOTALL)
+    cleaned = re.sub(pattern, "\n", text)
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
+    return cleaned.strip()
+
+
+def merge_targets_into_description(current_description: str, target_lines: List[str]) -> str:
+    """
+    Update only Acunetix-targets service block, preserving PT_STATE_JSON block as-is.
+    """
+    base_text = current_description if isinstance(current_description, str) else ""
+    without_targets = _remove_block(base_text, TARGET_BLOCK_START, TARGET_BLOCK_END)
+
+    if not target_lines:
+        return without_targets
+
+    targets_body = "Acunetix targets:\n" + "\n".join(target_lines)
+    target_block = f"{TARGET_BLOCK_START}\n{targets_body}\n{TARGET_BLOCK_END}"
+
+    state_pattern = re.compile(
+        rf"{re.escape(STATE_BLOCK_START)}\n.*?\n{re.escape(STATE_BLOCK_END)}",
+        re.DOTALL,
+    )
+    state_match = state_pattern.search(without_targets)
+    if not state_match:
+        return (without_targets + "\n\n" + target_block).strip() if without_targets else target_block
+
+    before_state = without_targets[:state_match.start()].rstrip()
+    state_block = state_match.group(0)
+    after_state = without_targets[state_match.end():].strip()
+
+    parts: List[str] = []
+    if before_state:
+        parts.append(before_state)
+    parts.append(target_block)
+    parts.append(state_block)
+    if after_state:
+        parts.append(after_state)
+    return "\n\n".join(parts)
+
+
 # ---------- Core processing for single product_type ----------
 
 def process_single_product_type(pt_id: int) -> dict:
@@ -306,10 +358,7 @@ def process_single_product_type(pt_id: int) -> dict:
             seen.add(line)
             unique_lines.append(line)
 
-    if unique_lines:
-        description_text = "Acunetix targets:\n" + "\n".join(unique_lines)
-    else:
-        description_text = ""
+    description_text = merge_targets_into_description(pt.get("description", ""), unique_lines)
 
     # 7) Patch product_type.description
     try:
@@ -334,4 +383,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
