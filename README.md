@@ -281,9 +281,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 - `PT_HEALTH_WINDOW_SIZE` — сколько Product Type анализируется в `WF_E_System_Health` за один запуск (по умолчанию `300`).
 - `HEALTH_MAX_LOG_EVENTS` — лимит массива `log_events` в health-отчете (по умолчанию `500`).
-- `ACUNETIX_MAPPING_DB` — **основной** persistent SQLite-path для PT↔target mapping (по умолчанию `/data/n8n/acunetix_mapping_store.sqlite3`).
-- `ACUNETIX_MAPPING_DEBUG_CACHE` — опциональный debug-cache path (по умолчанию `/tmp/acunetix_mapping_store.debug.sqlite3`).
-- `ACUNETIX_MAPPING_ALLOW_DEBUG_FALLBACK` — разрешает fallback в debug-cache только если primary path не задан/в `/tmp`.
+- `ACUNETIX_MAPPING_DB` — обязательный persistent SQLite-path для PT↔target mapping (по умолчанию `/data/n8n/acunetix_mapping_store.sqlite3`). Допускается только путь внутри `/data/...`; debug-fallback отключен.
 
 ### Что теперь показывает `WF_E_System_Health`
 
