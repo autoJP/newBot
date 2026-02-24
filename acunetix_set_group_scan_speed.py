@@ -156,16 +156,8 @@ def main() -> None:
     args = ap.parse_args()
 
 
-    acu_base_url = (
-        (args.acu_base_url or "").strip()
-        or (os.environ.get("ACUNETIX_BASE_URL") or "").strip()
-        or (os.environ.get("ACU_BASE_URL") or "").strip()
-    )
-    acu_api_token = (
-        (args.acu_api_token or "").strip()
-        or (os.environ.get("ACUNETIX_API_KEY") or "").strip()
-        or (os.environ.get("ACU_API_TOKEN") or "").strip()
-    )
+    acu_base_url = (args.acu_base_url or "").strip()
+    acu_api_token = (args.acu_api_token or "").strip()
     acu_node_name = (args.acu_node_name or "").strip()
 
     if args.acu_node_json:
@@ -177,6 +169,17 @@ def main() -> None:
                 acu_node_name = acu_node_name or str(node.get("name") or "").strip()
         except Exception as e:
             raise RuntimeError(f"invalid --acu-node-json: {e}")
+
+    acu_base_url = (
+        acu_base_url
+        or (os.environ.get("ACUNETIX_BASE_URL") or "").strip()
+        or (os.environ.get("ACU_BASE_URL") or "").strip()
+    )
+    acu_api_token = (
+        acu_api_token
+        or (os.environ.get("ACUNETIX_API_KEY") or "").strip()
+        or (os.environ.get("ACU_API_TOKEN") or "").strip()
+    )
 
     if not acu_base_url:
         raise RuntimeError("Acunetix endpoint is required: pass --acu-endpoint/--acu-base-url or --acu-node-json")
