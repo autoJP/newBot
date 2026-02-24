@@ -38,24 +38,13 @@
     },
     {
       "parameters": {
-        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/me' }}",
-        "headerParametersUi": {
-          "parameter": [
-            {
-              "name": "X-Auth",
-              "value": "={{ $env.ACUNETIX_API_TOKEN || '' }}"
-            }
-          ]
-        },
-        "options": {
-          "ignoreHttpStatusErrors": true,
-          "fullResponse": true
-        }
+        "language": "python",
+        "pythonCode": "import os, json, urllib.request\nraw = (os.environ.get('ACUNETIX_INSTANCES_JSON') or '').strip()\nnodes = []\nif raw:\n    try:\n        arr = json.loads(raw)\n        if isinstance(arr, list):\n            nodes = [i for i in arr if isinstance(i, dict) and i.get('endpoint') and i.get('token')]\n    except Exception:\n        nodes = []\nif not nodes:\n    nodes = [{'name':'acu-default','endpoint': os.environ.get('ACUNETIX_BASE_URL','https://localhost:3443'),'token': os.environ.get('ACUNETIX_API_KEY','')}]\n\nreports = []\nhealthy = 0\nfor idx, n in enumerate(nodes):\n    endpoint = str(n.get('endpoint') or '').rstrip('/')\n    token = str(n.get('token') or '')\n    name = n.get('name') or f'acu-{idx+1}'\n    status_code = None\n    ok = False\n    if endpoint and token:\n        try:\n            req=urllib.request.Request(endpoint+'/api/v1/me')\n            req.add_header('X-Auth', token)\n            with urllib.request.urlopen(req, timeout=6) as resp:\n                status_code = getattr(resp,'status',200)\n                ok = 200 <= status_code <= 299\n        except Exception:\n            ok = False\n    reports.append({'name':name,'endpoint':endpoint,'statusCode':status_code,'ok':ok})\n    if ok:\n        healthy += 1\n\nreturn [{'json': {'statusCode': 200 if healthy>0 else 503, 'healthy_nodes': healthy, 'total_nodes': len(reports), 'nodes': reports}}]"
       },
       "id": "h-acu",
       "name": "Check Acunetix Node",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         -540,
         180

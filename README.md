@@ -147,3 +147,20 @@ PT_STATE_JSON_END
 - `last_error` — последняя ошибка (строка или `null`)
 
 Если в `description` есть произвольный текст, он сохраняется, а state-блок обновляется/пере-записывается отдельно внизу.
+
+
+## Acunetix pool (multi-instance)
+
+Для распределения scan job между несколькими Acunetix-инстансами используйте переменную:
+
+- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `weight` (optional), `scan_limit` (optional), `name` (optional).
+
+Пример:
+
+```env
+ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","token":"token1","weight":2,"scan_limit":5},{"name":"acu-2","endpoint":"https://acu-2.local:3443","token":"token2","weight":1,"scan_limit":5}]
+```
+
+`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, считает активные сканы (`/api/v1/scans`) и назначает задачи только на healthy-ноды с доступной ёмкостью. Недоступные ноды автоматически исключаются из текущего распределения и автоматически возвращаются в пул после восстановления на следующем запуске.
+
+`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job.
