@@ -35,23 +35,13 @@
     },
     {
       "parameters": {
-        "url": "={{ ($env.ACUNETIX_BASE_URL || 'https://localhost:3443').replace(/\\/+$/,'') + '/api/v1/scans?l=100' }}",
-        "options": {
-          "ignoreHttpStatusErrors": false
-        },
-        "headerParametersUi": {
-          "parameter": [
-            {
-              "name": "X-Auth",
-              "value": "={{ $env.ACUNETIX_API_KEY || '' }}"
-            }
-          ]
-        }
+        "language": "python",
+        "pythonCode": "return [{\"json\": {\"pool_probe\": \"started\"}}]"
       },
       "id": "d-acu-scans",
       "name": "Get Active Acunetix Scans",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
       "position": [
         -760,
         160
@@ -60,7 +50,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "trigger_input = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\ntrigger_product_type_id = trigger_input.get('product_type_id')\ntrigger_domain = trigger_input.get('domain')\n\ntry:\n    trigger_product_type_id = int(trigger_product_type_id) if trigger_product_type_id is not None else None\nexcept Exception:\n    trigger_product_type_id = None\n\nproducts = ($node['Get PT Targets/Products'].json.get('results') or [])\nscans_resp = $json if isinstance($json, dict) else {}\nactive = 0\nfor s in scans_resp.get('scans', []) or []:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        active += 1\n\ncapacity = max(0, 5 - active)\n\neligible = []\nfor p in products:\n    if not isinstance(p, dict):\n        continue\n\n    product_type_id = p.get('prod_type')\n    try:\n        product_type_id = int(product_type_id)\n    except Exception:\n        continue\n\n    if trigger_product_type_id is not None and product_type_id != trigger_product_type_id:\n        continue\n\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n\n    if 'targets:ready' in tags and 'acunetix:active' not in tags:\n        eligible.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'product_type_id': product_type_id,\n            'domain': trigger_domain,\n        })\n\nselected = eligible[:capacity]\nreturn [{\n  'json': {\n    'active_scans': active,\n    'scan_limit': 5,\n    'available_slots': capacity,\n    'dispatch_count': len(selected),\n    'dispatch_items': selected\n  }\n}]"
+        "pythonCode": "import os\nimport json\nimport urllib.request\nimport urllib.error\n\nACTIVE_STATUSES = {'processing', 'scheduled', 'queued', 'starting'}\n\ndef parse_instances():\n    raw = (os.environ.get('ACUNETIX_INSTANCES_JSON') or '').strip()\n    instances = []\n    if raw:\n        try:\n            arr = json.loads(raw)\n            if isinstance(arr, list):\n                for idx, item in enumerate(arr):\n                    if not isinstance(item, dict):\n                        continue\n                    endpoint = str(item.get('endpoint') or '').strip().rstrip('/')\n                    token = str(item.get('token') or '').strip()\n                    if not endpoint or not token:\n                        continue\n                    instances.append({\n                        'name': item.get('name') or f'acu-{idx+1}',\n                        'endpoint': endpoint,\n                        'token': token,\n                        'weight': max(1, int(item.get('weight', 1) or 1)),\n                        'scan_limit': max(1, int(item.get('scan_limit', 5) or 5)),\n                    })\n        except Exception:\n            pass\n    if not instances:\n        endpoint = (os.environ.get('ACUNETIX_BASE_URL') or 'https://localhost:3443').strip().rstrip('/')\n        token = (os.environ.get('ACUNETIX_API_KEY') or '').strip()\n        if token:\n            instances.append({'name':'acu-default','endpoint':endpoint,'token':token,'weight':1,'scan_limit':5})\n    return instances\n\ndef http_json(url, token, timeout=8):\n    req = urllib.request.Request(url)\n    req.add_header('X-Auth', token)\n    with urllib.request.urlopen(req, timeout=timeout) as resp:\n        data = resp.read().decode('utf-8')\n        return getattr(resp, 'status', 200), json.loads(data) if data else {}\n\ntrigger_input = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\ntrigger_product_type_id = trigger_input.get('product_type_id')\ntrigger_domain = trigger_input.get('domain')\ntry:\n    trigger_product_type_id = int(trigger_product_type_id) if trigger_product_type_id is not None else None\nexcept Exception:\n    trigger_product_type_id = None\n\nproducts = ($node['Get PT Targets/Products'].json.get('results') or [])\neligible = []\nfor p in products:\n    if not isinstance(p, dict):\n        continue\n    try:\n        product_type_id = int(p.get('prod_type'))\n    except Exception:\n        continue\n    if trigger_product_type_id is not None and product_type_id != trigger_product_type_id:\n        continue\n    tags = p.get('tags') or []\n    if not isinstance(tags, list):\n        tags = [str(tags)]\n    if 'targets:ready' in tags and 'acunetix:active' not in tags:\n        eligible.append({\n            'product_id': p.get('id'),\n            'product_name': p.get('name'),\n            'product_type_id': product_type_id,\n            'domain': trigger_domain,\n        })\n\ninstances = parse_instances()\nhealthy_nodes = []\nnode_reports = []\ntotal_active = 0\nfor node in instances:\n    report = dict(node)\n    try:\n        status, _ = http_json(node['endpoint'] + '/api/v1/me', node['token'])\n        if status < 200 or status > 299:\n            raise Exception(f'health_status_{status}')\n        _, scans = http_json(node['endpoint'] + '/api/v1/scans?l=100', node['token'])\n        active = 0\n        for s in scans.get('scans', []) or []:\n            st = (s.get('current_session') or {}).get('status', '')\n            if st in ACTIVE_STATUSES:\n                active += 1\n        capacity = max(0, int(node['scan_limit']) - active)\n        report.update({'healthy': True, 'active_scans': active, 'capacity': capacity})\n        total_active += active\n        if capacity > 0:\n            healthy_nodes.append({**node, 'capacity': capacity})\n    except Exception as e:\n        report.update({'healthy': False, 'active_scans': None, 'capacity': 0, 'error': str(e)})\n    node_reports.append(report)\n\nselected = []\nweighted = []\nfor idx, node in enumerate(healthy_nodes):\n    weighted.extend([idx] * int(node.get('weight', 1)))\ncursor = 0\nwhile eligible and weighted:\n    idx = weighted[cursor % len(weighted)]\n    cursor += 1\n    node = healthy_nodes[idx]\n    if node['capacity'] <= 0:\n        weighted = [w for w in weighted if w != idx]\n        weighted = [w-1 if w>idx else w for w in weighted]\n        healthy_nodes.pop(idx)\n        if not healthy_nodes:\n            break\n        continue\n    item = eligible.pop(0)\n    item.update({\n        'acunetix_node_name': node['name'],\n        'acunetix_endpoint': node['endpoint'],\n        'acunetix_token': node['token'],\n    })\n    selected.append(item)\n    node['capacity'] -= 1\n\nreturn [{\n  'json': {\n    'active_scans': total_active,\n    'scan_limit': sum(int(n.get('scan_limit', 0)) for n in instances),\n    'available_slots': len(selected),\n    'dispatch_count': len(selected),\n    'dispatch_items': selected,\n    'acunetix_pool': node_reports,\n  }\n}]"
       },
       "id": "d-plan",
       "name": "Build Dispatch Plan (Python)",
@@ -95,7 +85,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "out = []\nfor row in $json.get('dispatch_items', []):\n    if not isinstance(row, dict):\n        continue\n    out.append({\n        'json': {\n            'product_id': row.get('product_id'),\n            'product_name': row.get('product_name'),\n            'product_type_id': row.get('product_type_id'),\n            'domain': row.get('domain'),\n        }\n    })\nreturn out"
+        "pythonCode": "out = []\nfor row in $json.get('dispatch_items', []):\n    if not isinstance(row, dict):\n        continue\n    out.append({'json': {\n        'product_id': row.get('product_id'),\n        'product_name': row.get('product_name'),\n        'product_type_id': row.get('product_type_id'),\n        'domain': row.get('domain'),\n        'acunetix_node_name': row.get('acunetix_node_name'),\n        'acunetix_endpoint': row.get('acunetix_endpoint'),\n        'acunetix_token': row.get('acunetix_token'),\n    }})\nreturn out"
       },
       "id": "d-expand",
       "name": "Expand Dispatch Items",
