@@ -111,14 +111,14 @@
 
 Оркестратор (`WF_Dojo_Master`) использует лимиты из `.env`:
 
-- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных **внутренних subdomain jobs** на стадии `subdomains` (по умолчанию `5`). Ограничение применяется к суммарному значению `counters.subdomains_running` в PT-state, а не только к количеству PT в `subdomains_running`.
+- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных **внутренних subdomain jobs** на стадии `subdomains` (по умолчанию `5`). Оркестратор раскладывает Stage A в очередь отдельных jobs внутри PT и ограничивает именно worker-пул этих jobs. Ограничение применяется к суммарному значению `counters.subdomains_running` в PT-state, а не к количеству PT в `subdomains_running`.
 - `PT_LOCK_TTL_MINUTES` — TTL блокировки PT-state (`lock_owner`, `lock_until`) для защиты от дублей при параллельных trigger.
 - `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES` — TTL для зависших PT в `subdomains_running`; при истечении PT переводится в `error` для автоматического восстановления после рестарта.
 - `NMAP_CONCURRENCY` — ограничение количества Product-задач в этапе nmap за проход.
 - `PT_WINDOW_SIZE` — сколько PT анализируется за проход планировщика.
 
 Важно: лимит применяется по фактическому числу внутренних subdomain jobs (`counters.subdomains_running`) во всех PT.
-Это означает, что один PT с несколькими параллельными subdomain jobs может занять несколько слотов `SUBDOMAINS_CONCURRENCY`.
+Это означает, что один PT с несколькими параллельными subdomain jobs может занять несколько слотов `SUBDOMAINS_CONCURRENCY`, а второй PT в этот момент может не получить слот даже при малом числе PT-jobs.
 
 
 Рекомендуемые значения в `.env`:
@@ -166,7 +166,7 @@ PT_STATE_JSON_END
 - `version` — версия формата (сейчас `1`)
 - `state` — текущее состояние PT
 - `counters` — счетчики этапов (`subdomains_runs`, `nmap_runs`, `targets_runs`, `acu_runs`)
-- `subdomains_total` / `subdomains_done` / `subdomains_failed` / `subdomains_running` — счетчики внутренней subdomains-стадии для проверяемого завершения этапа на уровне PT.
+- `subdomains_total` / `subdomains_done` / `subdomains_failed` / `subdomains_running` — счетчики внутренней subdomains-стадии на уровне PT (дублируются в `counters.*` для обратной совместимости) и используются барьером завершения `subdomains_done` по факту выполнения всех внутренних jobs.
 - `last_update` — время последнего обновления (ISO8601, UTC)
 - `retry_count` — число ретраев
 - `last_error` — последняя ошибка (строка или `null`)
@@ -255,7 +255,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 ### Правила переходов между стадиями
 
-- `new|error -> subdomains_running` (если есть слот по `SUBDOMAINS_CONCURRENCY`).
+- `new|error|subdomains_running -> subdomains_running` (диспетчеризация очереди внутренних Stage-A jobs до исчерпания `SUBDOMAINS_CONCURRENCY`; переход в `subdomains_done` только после `subdomains_done + subdomains_failed == subdomains_total` и `subdomains_running == 0`).
 - `subdomains_done|nmap_running -> nmap_running` (батч jobs до `NMAP_CONCURRENCY`).
 - `nmap_done -> targets_ready`.
 - `targets_ready -> acu_running`.
