@@ -23,11 +23,14 @@
      --scan-speed sequential
 
 Все параметры можно также брать из переменных окружения:
+  ACUNETIX_BASE_URL, ACUNETIX_API_KEY.
+Для переходного периода поддерживаются legacy-алиасы:
   ACU_BASE_URL, ACU_API_TOKEN.
 """
 
 import argparse
 import json
+import os
 import sys
 import traceback
 from typing import Any, Dict, List, Optional
@@ -153,8 +156,16 @@ def main() -> None:
     args = ap.parse_args()
 
 
-    acu_base_url = (args.acu_base_url or "").strip()
-    acu_api_token = (args.acu_api_token or "").strip()
+    acu_base_url = (
+        (args.acu_base_url or "").strip()
+        or (os.environ.get("ACUNETIX_BASE_URL") or "").strip()
+        or (os.environ.get("ACU_BASE_URL") or "").strip()
+    )
+    acu_api_token = (
+        (args.acu_api_token or "").strip()
+        or (os.environ.get("ACUNETIX_API_KEY") or "").strip()
+        or (os.environ.get("ACU_API_TOKEN") or "").strip()
+    )
     acu_node_name = (args.acu_node_name or "").strip()
 
     if args.acu_node_json:
@@ -289,4 +300,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

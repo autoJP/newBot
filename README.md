@@ -21,7 +21,15 @@
    - `NMAP_XML_DIR`
    - `N8N_*`
    - `SUBDOMAINS_CONCURRENCY`, `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES`, `NMAP_CONCURRENCY`, `PT_WINDOW_SIZE`
-- `PT_LOCK_TTL_MINUTES`, `PT_RETRY_SUBDOMAINS_MAX`, `PT_RETRY_NMAP_MAX`, `PT_RETRY_TARGETS_MAX`, `PT_RETRY_ACU_MAX`
+   - `PT_LOCK_TTL_MINUTES`, `PT_RETRY_SUBDOMAINS_MAX`, `PT_RETRY_NMAP_MAX`, `PT_RETRY_TARGETS_MAX`, `PT_RETRY_ACU_MAX`
+
+### Стандарт переменных Acunetix
+
+Чтобы исключить двусмысленность, единый стандарт для API-ключа: **`ACUNETIX_API_KEY`**.
+
+- Основные переменные: `ACUNETIX_BASE_URL`, `ACUNETIX_API_KEY`.
+- На переходный период сохранена обратная совместимость: если `ACUNETIX_API_KEY` пустой, workflow/скрипты читают legacy-ключ `ACU_API_TOKEN`.
+- Для base URL также поддерживается legacy-алиас `ACU_BASE_URL`, но рекомендуется использовать только `ACUNETIX_BASE_URL`.
 
 > Рекомендуется загружать этот `.env` в окружение n8n/контейнера n8n, чтобы все workflow и скрипты видели одинаковые значения.
 
@@ -157,6 +165,8 @@ PT_STATE_JSON_END
 ## Acunetix pool (multi-instance)
 
 Для распределения scan job между несколькими Acunetix-инстансами используйте переменные:
+
+> Если `ACUNETIX_API_KEY` не задан, fallback идёт на legacy `ACU_API_TOKEN` (переходный режим).
 
 - `ACUNETIX_MAX_SCANS_PER_NODE` — глобальный лимит активных сессий на ноду (по умолчанию `5`).
 - `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional), `weight` (optional, для policy `weighted`).
