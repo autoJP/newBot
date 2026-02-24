@@ -5,6 +5,7 @@ import argparse
 import json
 import sys
 import traceback
+from urllib.parse import urljoin
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -52,11 +53,21 @@ def dojo_get_products_for_pt(
     token: str,
     pt_id: int,
 ) -> List[Dict[str, Any]]:
-    url = f"{base_url.rstrip('/')}/products/?prod_type={pt_id}&limit=1000"
-    r = s.get(url, headers=dojo_headers(token), timeout=60)
-    r.raise_for_status()
-    data = r.json()
-    return data.get("results", [])
+    url = f"{base_url.rstrip('/')}/products/?prod_type={pt_id}&limit=200&offset=0"
+    products: List[Dict[str, Any]] = []
+
+    while url:
+        r = s.get(url, headers=dojo_headers(token), timeout=60)
+        r.raise_for_status()
+        data = r.json()
+        products.extend(data.get("results", []))
+
+        next_url = data.get("next")
+        if not next_url:
+            break
+        url = next_url if str(next_url).startswith("http") else urljoin(f"{base_url.rstrip('/')}/", str(next_url).lstrip("/"))
+
+    return products
 
 
 def normalize_bool(val: Any) -> bool:
@@ -124,11 +135,22 @@ def acu_list_groups(
     base_url: str,
     token: str,
 ) -> List[Dict[str, Any]]:
-    url = f"{base_url.rstrip('/')}/api/v1/target_groups?limit=100"
-    r = s.get(url, headers=acu_headers(token), timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    return data.get("groups", [])
+    url = f"{base_url.rstrip('/')}/api/v1/target_groups?limit=100&c=0"
+    groups: List[Dict[str, Any]] = []
+
+    while url:
+        r = s.get(url, headers=acu_headers(token), timeout=30)
+        r.raise_for_status()
+        data = r.json()
+        groups.extend(data.get("groups", []))
+
+        pagination = data.get("pagination", {}) if isinstance(data, dict) else {}
+        next_cursor = pagination.get("next_cursor") if isinstance(pagination, dict) else None
+        if next_cursor is None:
+            break
+        url = f"{base_url.rstrip('/')}/api/v1/target_groups?limit=100&c={next_cursor}"
+
+    return groups
 
 
 def acu_find_group_by_name(groups: List[Dict[str, Any]], name: str) -> Optional[Dict[str, Any]]:
@@ -313,4 +335,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
