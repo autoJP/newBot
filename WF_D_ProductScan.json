@@ -15,7 +15,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "trigger = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\n\nselected = trigger.get('selected_acu_node') if isinstance(trigger.get('selected_acu_node'), dict) else {}\nendpoint = str(selected.get('endpoint') or trigger.get('acunetix_endpoint') or '').strip().rstrip('/')\napi_key = str(selected.get('token') or trigger.get('acunetix_api_key') or trigger.get('acunetix_token') or '').strip()\nnode_name = str(selected.get('name') or trigger.get('acunetix_node_name') or 'acu-selected').strip()\n\nif not endpoint:\n    raise Exception('acunetix_endpoint is required for WF_D_ProductScan stage')\nif not api_key:\n    raise Exception('Acunetix API key is empty for WF_D_ProductScan stage. Set ACUNETIX_API_KEY (temporary fallback: ACU_API_TOKEN).')\n\nreturn [{\n    'json': {\n        **trigger,\n        'selected_acu_node': {\n            'name': node_name,\n            'endpoint': endpoint,\n            'token': api_key,\n        },\n        'acunetix_node_name': node_name,\n        'acunetix_endpoint': endpoint,\n        'acunetix_api_key': api_key,\n        'acunetix_token': api_key,\n    }\n}]"
+        "pythonCode": "trigger = $node['Trigger'].json if isinstance($node['Trigger'].json, dict) else {}\n\nselected = trigger.get('selected_acu_node') if isinstance(trigger.get('selected_acu_node'), dict) else {}\nendpoint = str(selected.get('endpoint') or trigger.get('acunetix_endpoint') or '').strip().rstrip('/')\napi_key = str(selected.get('api_key') or selected.get('token') or trigger.get('acunetix_api_key') or trigger.get('acunetix_token') or '').strip()\nnode_name = str(selected.get('name') or trigger.get('acunetix_node_name') or 'acu-selected').strip()\n\nif not endpoint:\n    raise Exception('acunetix_endpoint is required for WF_D_ProductScan stage')\nif not api_key:\n    raise Exception('WF_D_ProductScan stage config error: Acunetix API key is empty. Set ACUNETIX_API_KEY (temporary fallback: ACU_API_TOKEN).')\n\nreturn [{\n    'json': {\n        **trigger,\n        'selected_acu_node': {\n            'name': node_name,\n            'endpoint': endpoint,\n            'api_key': api_key,\n            'token': api_key,\n        },\n        'acunetix_node_name': node_name,\n        'acunetix_endpoint': endpoint,\n        'acunetix_api_key': api_key,\n        'acunetix_token': api_key,\n    }\n}]"
       },
       "id": "p-validate-node",
       "name": "Validate Acunetix Node Input",
@@ -72,7 +72,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import re\n\ntrigger = $node['Validate Acunetix Node Input'].json or {}\nproduct = $node['Get Product'].json\nexisting = $json.get('scans', []) or []\n\nselected = trigger.get('selected_acu_node') if isinstance(trigger.get('selected_acu_node'), dict) else {}\nendpoint = str(selected.get('endpoint') or trigger.get('acunetix_endpoint') or '').strip().rstrip('/')\ntoken = str(selected.get('token') or trigger.get('acunetix_api_key') or trigger.get('acunetix_token') or '').strip()\nnode_name = str(selected.get('name') or trigger.get('acunetix_node_name') or 'acu-selected').strip()\n\nif not endpoint or not token:\n    raise Exception('selected_acu_node (endpoint/token/name) is required from orchestrator')\n\nraw_pt_id = trigger.get('pt_id', trigger.get('product_type_id'))\ntry:\n    pt_id = int(raw_pt_id)\nexcept Exception:\n    raise Exception(f\"pt_id is required and must be integer, got: {raw_pt_id}\")\n\nraw_target_id = trigger.get('target_id')\ntarget_id = str(raw_target_id or '').strip()\nif not target_id:\n    raise Exception(f\"target_id is required for product {product.get('id')}\")\nif not re.fullmatch(r'[0-9a-fA-F-]{36}', target_id):\n    raise Exception(f\"target_id has invalid format: {target_id}\")\n\nbase_payload = {\n    'pt_id': pt_id,\n    'product_id': product.get('id'),\n    'product_name': product.get('name'),\n    'acunetix_node_name': node_name,\n    'acunetix_endpoint': endpoint,\n    'acunetix_api_key': token,\n    'acunetix_token': token,\n    'selected_acu_node': {'name': node_name, 'endpoint': endpoint, 'token': token},\n    'target_id': target_id,\n}\n\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{'json': {\n            **base_payload,\n            'skip': True,\n            'reason': 'scan already active',\n            'scan_id': s.get('scan_id'),\n        }}]\n\nreturn [{'json': {\n    **base_payload,\n    'skip': False,\n    'target_url': f\"https://{product.get('name')}\",\n}}]"
+        "pythonCode": "import re\n\ntrigger = $node['Validate Acunetix Node Input'].json or {}\nproduct = $node['Get Product'].json\nexisting = $json.get('scans', []) or []\n\nselected = trigger.get('selected_acu_node') if isinstance(trigger.get('selected_acu_node'), dict) else {}\nendpoint = str(selected.get('endpoint') or trigger.get('acunetix_endpoint') or '').strip().rstrip('/')\ntoken = str(selected.get('api_key') or selected.get('token') or trigger.get('acunetix_api_key') or trigger.get('acunetix_token') or '').strip()\nnode_name = str(selected.get('name') or trigger.get('acunetix_node_name') or 'acu-selected').strip()\n\nif not endpoint or not token:\n    raise Exception('WF_D_ProductScan stage config error: selected_acu_node (endpoint/api_key/name) is required from orchestrator')\n\nraw_pt_id = trigger.get('pt_id', trigger.get('product_type_id'))\ntry:\n    pt_id = int(raw_pt_id)\nexcept Exception:\n    raise Exception(f\"pt_id is required and must be integer, got: {raw_pt_id}\")\n\nraw_target_id = trigger.get('target_id')\ntarget_id = str(raw_target_id or '').strip()\nif not target_id:\n    raise Exception(f\"target_id is required for product {product.get('id')}\")\nif not re.fullmatch(r'[0-9a-fA-F-]{36}', target_id):\n    raise Exception(f\"target_id has invalid format: {target_id}\")\n\nbase_payload = {\n    'pt_id': pt_id,\n    'product_id': product.get('id'),\n    'product_name': product.get('name'),\n    'acunetix_node_name': node_name,\n    'acunetix_endpoint': endpoint,\n    'acunetix_api_key': token,\n    'acunetix_token': token,\n    'selected_acu_node': {'name': node_name, 'endpoint': endpoint, 'api_key': token, 'token': token},\n    'target_id': target_id,\n}\n\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{'json': {\n            **base_payload,\n            'skip': True,\n            'reason': 'scan already active',\n            'scan_id': s.get('scan_id'),\n        }}]\n\nreturn [{'json': {\n    **base_payload,\n    'skip': False,\n    'target_url': f\"https://{product.get('name')}\",\n}}]"
       },
       "id": "p-gate",
       "name": "Duplicate Guard (Python)",
@@ -113,7 +113,7 @@
           "parameter": [
             {
               "name": "X-Auth",
-              "value": "={{ $json.acunetix_token || '' }}"
+              "value": "={{ $json.acunetix_api_key || $json.acunetix_token || '' }}"
             }
           ]
         }
@@ -162,7 +162,7 @@
           "parameter": [
             {
               "name": "X-Auth",
-              "value": "={{ $node['Duplicate Guard (Python)'].json.acunetix_token || '' }}"
+              "value": "={{ $node['Duplicate Guard (Python)'].json.acunetix_api_key || $node['Duplicate Guard (Python)'].json.acunetix_token || '' }}"
             }
           ]
         }
@@ -252,7 +252,7 @@
           "parameter": [
             {
               "name": "X-Auth",
-              "value": "={{ $node['Duplicate Guard (Python)'].json.acunetix_token || '' }}"
+              "value": "={{ $node['Duplicate Guard (Python)'].json.acunetix_api_key || $node['Duplicate Guard (Python)'].json.acunetix_token || '' }}"
             }
           ]
         }
@@ -274,7 +274,7 @@
           "parameter": [
             {
               "name": "X-Auth",
-              "value": "={{ $node['Duplicate Guard (Python)'].json.acunetix_token || '' }}"
+              "value": "={{ $node['Duplicate Guard (Python)'].json.acunetix_api_key || $node['Duplicate Guard (Python)'].json.acunetix_token || '' }}"
             }
           ]
         }
