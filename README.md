@@ -153,14 +153,16 @@ PT_STATE_JSON_END
 
 Для распределения scan job между несколькими Acunetix-инстансами используйте переменную:
 
-- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `weight` (optional), `scan_limit` (optional), `name` (optional).
+- `ACUNETIX_MAX_SCANS_PER_NODE` — глобальный лимит активных сессий на ноду (по умолчанию `5`).
+- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional).
 
 Пример:
 
 ```env
-ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","token":"token1","weight":2,"scan_limit":5},{"name":"acu-2","endpoint":"https://acu-2.local:3443","token":"token2","weight":1,"scan_limit":5}]
+ACUNETIX_MAX_SCANS_PER_NODE=5
+ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","token":"token1","max_scans_per_node":8},{"name":"acu-2","endpoint":"https://acu-2.local:3443","token":"token2"}]
 ```
 
-`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, считает активные сканы (`/api/v1/scans`) и назначает задачи только на healthy-ноды с доступной ёмкостью. Недоступные ноды автоматически исключаются из текущего распределения и автоматически возвращаются в пул после восстановления на следующем запуске.
+`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Назначение выполняется на наименее загруженные healthy-ноды, недоступные ноды автоматически исключаются из текущего распределения и возвращаются в пул после восстановления на следующем запуске.
 
 `WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job.
