@@ -281,6 +281,9 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 - `PT_HEALTH_WINDOW_SIZE` — сколько Product Type анализируется в `WF_E_System_Health` за один запуск (по умолчанию `300`).
 - `HEALTH_MAX_LOG_EVENTS` — лимит массива `log_events` в health-отчете (по умолчанию `500`).
+- `ACUNETIX_MAPPING_DB` — **основной** persistent SQLite-path для PT↔target mapping (по умолчанию `/data/n8n/acunetix_mapping_store.sqlite3`).
+- `ACUNETIX_MAPPING_DEBUG_CACHE` — опциональный debug-cache path (по умолчанию `/tmp/acunetix_mapping_store.debug.sqlite3`).
+- `ACUNETIX_MAPPING_ALLOW_DEBUG_FALLBACK` — разрешает fallback в debug-cache только если primary path не задан/в `/tmp`.
 
 ### Что теперь показывает `WF_E_System_Health`
 
@@ -291,6 +294,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
   - `acu`: PT в `targets_ready`/`acu_running`.
 - `active_slots` — текущие активные PT по running-этапам (`subdomains_running`, `nmap_running`, `acu_running`).
 - `node_errors` — ошибки внешних сервисов и Acunetix-нод.
+- `mapping_backend` — состояние backend-хранилища mapping (доступность SQLite + объем/целостность записей).
 - `pt_errors` — ошибки PT из state-блока (`last_stage` + `last_error`).
 
 ### Единый формат log-событий
