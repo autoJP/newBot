@@ -108,7 +108,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import json\n\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\nitems = _input.all()\nextract_items = _(\"Extract Domain\").all()\n\nif not items:\n    raise Exception('Parse Results: no input items')\n\noutput = []\nfor idx, item in enumerate(items):\n    payload = item.json\n\n    stdout = read_key(payload, 'stdout', '{}')\n    try:\n        result = json.loads(stdout)\n    except Exception as e:\n        raise Exception(f'Failed to parse JSON from enum_subs_auto.py: {e}')\n\n    subs = read_key(result, 'subs', [])\n    if not isinstance(subs, list):\n        raise Exception('Invalid subdomains format from script')\n\n    hosts = []\n    for sub in subs:\n        if isinstance(sub, str) and sub:\n            hosts.append(sub)\n        elif isinstance(sub, dict) and isinstance(sub.get('host'), str) and sub.get('host'):\n            hosts.append(sub['host'])\n\n    extract = extract_items[idx].json if idx < len(extract_items) else {}\n\n    output.append({\n        'json': {\n            'product_type_id': read_key(extract, 'product_type_id'),\n            'domain': read_key(extract, 'domain'),\n            'subdomains': hosts,\n            'raw_result': result,\n        }\n    })\n\nreturn output\n"
+        "pythonCode": "import json\n\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\nitems = _input.all()\nextract_items = _(\"Extract Domain\").all()\n\nif not items:\n    raise Exception('Parse Results: no input items')\n\noutput = []\nfor idx, item in enumerate(items):\n    payload = item.json\n\n    stdout = read_key(payload, 'stdout', '{}')\n    try:\n        result = json.loads(stdout)\n    except Exception as e:\n        raise Exception(f'Failed to parse JSON from enum_subs_auto.py: {e}')\n\n    subs = read_key(result, 'subs', [])\n    if not isinstance(subs, list):\n        raise Exception('Invalid subdomains format from script')\n\n    hosts = []\n    for sub in subs:\n        if isinstance(sub, str) and sub:\n            hosts.append(sub)\n        elif isinstance(sub, dict) and isinstance(sub.get('host'), str) and sub.get('host'):\n            hosts.append(sub['host'])\n\n    extract = extract_items[idx].json if idx < len(extract_items) else {}\n\n    output.append({\n        'json': {\n            'product_type_id': read_key(extract, 'product_type_id'),\n            'domain': read_key(extract, 'domain'),\n            'subdomains': hosts,\n            'raw_result': result,\n            'product_type': read_key(extract, 'product_type'),\n            'workflow_status': 'ok',\n            'error_message': None,\n        }\n    })\n\nreturn output\n"
       },
       "name": "Parse Results",
       "type": "n8n-nodes-base.code",
@@ -215,7 +215,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "item = _input.first()\npayload = item.json if item and isinstance(item.json, dict) else {}\n\nexit_code = payload.get('exitCode')\nstderr = payload.get('stderr') or ''\nraise Exception(f'Subdomain enumeration failed with exit code {exit_code}: {stderr}')\n"
+        "pythonCode": "item = _input.first()\npayload = item.json if item and isinstance(item.json, dict) else {}\nextract_item = _(\"Extract Domain\").first()\nextract = extract_item.json if extract_item and isinstance(extract_item.json, dict) else {}\n\nexit_code = payload.get('exitCode')\nstderr = payload.get('stderr') or ''\nstdout = payload.get('stdout') or ''\nerror_message = f'Subdomain enumeration failed with exit code {exit_code}: {stderr}'.strip()\n\nreturn [{\n    'json': {\n        'product_type_id': extract.get('product_type_id'),\n        'domain': extract.get('domain'),\n        'product_type': extract.get('product_type'),\n        'subdomains': [],\n        'raw_result': {'stdout': stdout, 'stderr': stderr, 'exit_code': exit_code},\n        'workflow_status': 'error',\n        'error_message': error_message,\n    }\n}]"
       },
       "name": "Handle Script Error",
       "type": "n8n-nodes-base.code",
@@ -225,6 +225,45 @@
         208
       ],
       "id": "c1357515-58a9-47b1-b598-3842a2aacd4e"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "import json\nimport re\nfrom datetime import datetime, timezone\n\nBLOCK_START = \"PT_STATE_JSON_START\"\nBLOCK_END = \"PT_STATE_JSON_END\"\n\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\ndef parse_state(description):\n    if not isinstance(description, str):\n        return {}\n    m = re.search(rf\"{BLOCK_START}\\n(.*?)\\n{BLOCK_END}\", description, re.DOTALL)\n    if not m:\n        return {}\n    try:\n        state = json.loads(m.group(1).strip())\n        return state if isinstance(state, dict) else {}\n    except Exception:\n        return {}\n\n\ndef build_description(base_description, state_payload):\n    text = base_description if isinstance(base_description, str) else ''\n    pattern = re.compile(rf\"\\n?{BLOCK_START}\\n.*?\\n{BLOCK_END}\\n?\", re.DOTALL)\n    clean = re.sub(pattern, \"\\n\", text).rstrip()\n    block = f\"{BLOCK_START}\\n{json.dumps(state_payload, ensure_ascii=False, sort_keys=True)}\\n{BLOCK_END}\"\n    if clean:\n        return clean + \"\\n\\n\" + block\n    return block\n\n\nitems = _input.all()\nif not items:\n    return []\n\nnow = datetime.now(timezone.utc).isoformat()\nout = []\nfor item in items:\n    payload = item.json if isinstance(item.json, dict) else {}\n    product_type_id = read_key(payload, 'product_type_id')\n    product_type = read_key(payload, 'product_type', {})\n    status = str(read_key(payload, 'workflow_status', 'ok') or 'ok')\n\n    description = read_key(product_type, 'description', '')\n    state_obj = parse_state(description)\n    counters = read_key(state_obj, 'counters', {})\n    if not isinstance(counters, dict):\n        counters = {}\n\n    retry_count = int(read_key(state_obj, 'retry_count', 0) or 0)\n    last_error = read_key(payload, 'error_message')\n\n    if status == 'ok':\n        counters['subdomains_success'] = int(counters.get('subdomains_success', 0) or 0) + 1\n        next_state = 'subdomains_done'\n        last_error = None\n    else:\n        counters['subdomains_errors'] = int(counters.get('subdomains_errors', 0) or 0) + 1\n        next_state = 'error'\n        retry_count += 1\n\n    updated_state = {\n        'version': 1,\n        'state': next_state,\n        'counters': counters,\n        'last_update': now,\n        'retry_count': retry_count,\n        'last_error': last_error,\n    }\n\n    out.append({\n        'json': {\n            'product_type_id': product_type_id,\n            'state': next_state,\n            'description': build_description(description, updated_state),\n            'domain': read_key(payload, 'domain'),\n            'workflow_status': status,\n        }\n    })\n\nreturn out"
+      },
+      "name": "Build PT State Update",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        200,
+        208
+      ],
+      "id": "23a17734-a39b-481c-ac1b-a335fb1253c3"
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "authentication": "headerAuth",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/product_types/' + $json.product_type_id + '/' }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { description: $json.description } }}",
+        "options": {}
+      },
+      "name": "Patch PT State in Dojo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 1,
+      "position": [
+        408,
+        208
+      ],
+      "id": "aa5e922a-3d80-4f53-8899-c2c693feec22",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "mGl4PbJkKfeJbTg8",
+          "name": "Header Auth account"
+        }
+      }
     }
   ],
   "pinData": {},
@@ -314,6 +353,11 @@
             "node": "Generate Final Report",
             "type": "main",
             "index": 0
+          },
+          {
+            "node": "Build PT State Update",
+            "type": "main",
+            "index": 0
           }
         ]
       ]
@@ -334,6 +378,28 @@
         [
           {
             "node": "Create Product in Dojo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Script Error": {
+      "main": [
+        [
+          {
+            "node": "Build PT State Update",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build PT State Update": {
+      "main": [
+        [
+          {
+            "node": "Patch PT State in Dojo",
             "type": "main",
             "index": 0
           }

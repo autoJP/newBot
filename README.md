@@ -20,6 +20,7 @@
    - `ACUNETIX_*`
    - `NMAP_XML_DIR`
    - `N8N_*`
+   - `SUBDOMAINS_CONCURRENCY`, `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES`, `NMAP_CONCURRENCY`, `PT_WINDOW_SIZE`
 
 > Рекомендуется загружать этот `.env` в окружение n8n/контейнера n8n, чтобы все workflow и скрипты видели одинаковые значения.
 
@@ -94,6 +95,21 @@
 - быстрый smoke-check перед массовым запуском по расписанию.
 
 Практика: запускать `WF_E_System_Health` перед включением Cron и после изменений credentials/переменных окружения.
+
+
+### Лимиты и диспетчеризация задач
+
+Оркестратор (`WF_Dojo_Master`) использует лимиты из `.env`:
+
+- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных PT в `subdomains_running`.
+- `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES` — TTL для зависших PT в `subdomains_running`; при истечении PT переводится в `error` для автоматического восстановления после рестарта.
+- `NMAP_CONCURRENCY` — ограничение количества Product-задач в этапе nmap за проход.
+- `PT_WINDOW_SIZE` — сколько PT анализируется за проход планировщика.
+
+`WF_A_Subdomains_PT` теперь фиксирует результат этапа subdomains в PT-state:
+
+- при успехе переводит PT в `subdomains_done`,
+- при ошибке переводит PT в `error`, увеличивает `retry_count` и записывает `last_error`.
 
 ## PT state-machine в `product_type.description`
 
