@@ -110,11 +110,14 @@
 
 Оркестратор (`WF_Dojo_Master`) использует лимиты из `.env`:
 
-- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных PT в `subdomains_running`.
+- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных **PT jobs** в `subdomains_running` (по умолчанию `5`, если переменная не задана).
 - `PT_LOCK_TTL_MINUTES` — TTL блокировки PT-state (`lock_owner`, `lock_until`) для защиты от дублей при параллельных trigger.
 - `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES` — TTL для зависших PT в `subdomains_running`; при истечении PT переводится в `error` для автоматического восстановления после рестарта.
 - `NMAP_CONCURRENCY` — ограничение количества Product-задач в этапе nmap за проход.
 - `PT_WINDOW_SIZE` — сколько PT анализируется за проход планировщика.
+
+Важно: этот лимит применяется на уровне оркестратора к количеству PT, одновременно запущенных в `WF_A_Subdomains_PT`.
+Он **не** ограничивает внутренний параллелизм внутри одного PT/job (например, если внутри `WF_A_Subdomains_PT` будут добавлены параллельные источники subdomains).
 
 `WF_A_Subdomains_PT` теперь фиксирует результат этапа subdomains в PT-state:
 
