@@ -8,6 +8,7 @@ import sys
 import traceback
 from urllib.parse import urljoin
 from typing import Any, Dict, List, Optional
+import re
 
 import requests
 import urllib3
@@ -81,18 +82,24 @@ def normalize_bool(val: Any) -> bool:
     return False
 
 
-def build_targets_from_products(products: List[Dict[str, Any]]) -> List[str]:
+def build_targets_from_products(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Берём только internet_accessible=true, строим URL для Acunetix.
+    Берём только internet_accessible=true, строим URL для Acunetix и сохраняем связку product_id -> url.
     • если уже http/https – оставляем
     • если IP:port – делаем http://IP:port
     • если домен – https://домен (без дубликатов www.)
     """
     seen = set()
-    urls: List[str] = []
+    targets: List[Dict[str, Any]] = []
 
     for prod in products:
         if not normalize_bool(prod.get("internet_accessible")):
+            continue
+
+        product_id = prod.get("id")
+        try:
+            product_id = int(product_id)
+        except Exception:
             continue
 
         name = (prod.get("name") or "").strip()
@@ -115,9 +122,9 @@ def build_targets_from_products(products: List[Dict[str, Any]]) -> List[str]:
         if url in seen:
             continue
         seen.add(url)
-        urls.append(url)
+        targets.append({"product_id": product_id, "url": url, "product_name": name})
 
-    return urls
+    return targets
 
 
 # -------------------- Acunetix --------------------
@@ -175,6 +182,126 @@ def acu_create_group(
     return r.json()
 
 
+def acu_list_targets(
+    s: requests.Session,
+    base_url: str,
+    token: str,
+) -> List[Dict[str, Any]]:
+    url = f"{base_url.rstrip('/')}/api/v1/targets?l=100"
+    targets: List[Dict[str, Any]] = []
+
+    while url:
+        r = s.get(url, headers=acu_headers(token), timeout=45)
+        r.raise_for_status()
+        data = r.json()
+        targets.extend(data.get("targets", []))
+
+        pagination = data.get("pagination", {}) if isinstance(data, dict) else {}
+        next_cursor = pagination.get("next_cursor") if isinstance(pagination, dict) else None
+        if next_cursor is None:
+            break
+        url = f"{base_url.rstrip('/')}/api/v1/targets?l=100&c={next_cursor}"
+
+    return targets
+
+
+def normalize_target_address(value: Any) -> str:
+    return re.sub(r"/+$", "", str(value or "").strip().lower())
+
+
+def resolve_target_mapping(
+    submitted_targets: List[Dict[str, Any]],
+    add_result: Dict[str, Any],
+    all_targets: List[Dict[str, Any]],
+) -> Dict[str, str]:
+    url_to_target: Dict[str, str] = {}
+
+    response = add_result.get("response") if isinstance(add_result, dict) else {}
+    response_targets = response.get("targets", []) if isinstance(response, dict) else []
+    if isinstance(response_targets, list):
+        for t in response_targets:
+            if not isinstance(t, dict):
+                continue
+            target_id = str(t.get("target_id") or "").strip()
+            if not target_id:
+                continue
+            for raw_addr in [t.get("address"), t.get("addressValue"), t.get("target")]:
+                norm = normalize_target_address(raw_addr)
+                if norm:
+                    url_to_target[norm] = target_id
+
+    for t in all_targets:
+        if not isinstance(t, dict):
+            continue
+        target_id = str(t.get("target_id") or "").strip()
+        if not target_id:
+            continue
+        for raw_addr in [t.get("address"), t.get("target")]:
+            norm = normalize_target_address(raw_addr)
+            if norm:
+                url_to_target[norm] = target_id
+
+    mapping: Dict[str, str] = {}
+    for row in submitted_targets:
+        if not isinstance(row, dict):
+            continue
+        pid = row.get("product_id")
+        norm = normalize_target_address(row.get("url"))
+        if pid is None or not norm:
+            continue
+        tid = url_to_target.get(norm)
+        if tid:
+            mapping[str(pid)] = tid
+
+    return mapping
+
+
+def save_product_target_mapping(
+    mapping: Dict[str, str],
+    pt_id: int,
+    acu_base_url: str,
+    output_path: str,
+) -> Dict[str, Any]:
+    payload: Dict[str, Any] = {
+        "updated_at": None,
+        "version": 1,
+        "items": {},
+    }
+    if os.path.exists(output_path):
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                old = json.load(f)
+            if isinstance(old, dict):
+                payload["updated_at"] = old.get("updated_at")
+                old_items = old.get("items")
+                if isinstance(old_items, dict):
+                    payload["items"] = old_items
+        except Exception:
+            pass
+
+    items: Dict[str, Any] = payload.get("items", {})
+    for product_id, target_id in mapping.items():
+        items[str(product_id)] = {
+            "target_id": str(target_id),
+            "product_type_id": int(pt_id),
+            "acu_base_url": acu_base_url.rstrip("/"),
+        }
+
+    from datetime import datetime, timezone
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+    payload["items"] = items
+
+    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+    return {
+        "path": output_path,
+        "saved": len(mapping),
+        "total_items": len(items),
+    }
+
+
 def acu_targets_add(
     s: requests.Session,
     base_url: str,
@@ -225,6 +352,7 @@ def main() -> None:
     ap.add_argument("--acu-node-name", default="")
     ap.add_argument("--acu-node-json", default="")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--mapping-output", default="")
     args = ap.parse_args()
 
     acu_base_url = (
@@ -254,6 +382,12 @@ def main() -> None:
     if not acu_api_token:
         raise RuntimeError("Acunetix token is required: pass --acu-token/--acu-api-token or --acu-node-json")
 
+    mapping_output = (
+        (args.mapping_output or "").strip()
+        or (os.environ.get("ACUNETIX_TARGET_MAPPING_FILE") or "").strip()
+        or "/tmp/acunetix_dojo_target_mapping.json"
+    )
+
     debug: Dict[str, Any] = {
         "pt_id": args.pt_id,
         "dojo_base_url": args.dojo_base_url,
@@ -272,7 +406,8 @@ def main() -> None:
         products = dojo_get_products_for_pt(dojo_s, args.dojo_base_url, args.dojo_api_token, args.pt_id)
         debug["dojo_products_total"] = len(products)
 
-        urls = build_targets_from_products(products)
+        prepared_targets = build_targets_from_products(products)
+        urls = [str(x.get("url")) for x in prepared_targets]
         debug["targets_prepared"] = urls
         debug["targets_prepared_count"] = len(urls)
 
@@ -323,9 +458,15 @@ def main() -> None:
                 ],
                 "groups": [group_id],
             }
+            mapping = {str(x.get("product_id")): "dry-run-target-id" for x in prepared_targets if x.get("product_id") is not None}
+            debug["dojo_to_target_mapping"] = mapping
+            mapping_meta = save_product_target_mapping(mapping, args.pt_id, acu_base_url, mapping_output)
+            debug["mapping_output"] = mapping_meta
             print(json.dumps({
                 "ok": True,
                 "dry_run": True,
+                "target_mapping": mapping,
+                "mapping_output": mapping_meta,
                 "debug": debug,
             }, ensure_ascii=False))
             return
@@ -343,12 +484,26 @@ def main() -> None:
         if add_result["status"] not in (200, 201):
             raise RuntimeError(f"/api/v1/targets/add returned {add_result['status']}: {add_result['response']}")
 
+        all_targets = acu_list_targets(acu_s, acu_base_url, acu_api_token)
+        mapping = resolve_target_mapping(prepared_targets, add_result, all_targets)
+        debug["dojo_to_target_mapping"] = mapping
+        debug["dojo_to_target_mapping_count"] = len(mapping)
+
+        missing_ids = [str(x.get("product_id")) for x in prepared_targets if str(x.get("product_id")) not in mapping]
+        if missing_ids:
+            debug["mapping_missing_product_ids"] = missing_ids
+
+        mapping_meta = save_product_target_mapping(mapping, args.pt_id, acu_base_url, mapping_output)
+        debug["mapping_output"] = mapping_meta
+
         print(json.dumps({
             "ok": True,
             "product_type_id": args.pt_id,
             "product_type_name": pt_name,
             "group_id": group_id,
             "targets_count": len(urls),
+            "target_mapping": mapping,
+            "mapping_output": mapping_meta,
             "debug": debug,
         }, ensure_ascii=False))
 
