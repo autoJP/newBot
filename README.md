@@ -145,16 +145,19 @@ PT_STATE_JSON_END
 - `last_update` — время последнего обновления (ISO8601, UTC)
 - `retry_count` — число ретраев
 - `last_error` — последняя ошибка (строка или `null`)
+- `acu_dispatch_policy` — политика диспетчеризации Acunetix для PT в состоянии `acu_running` (`fairness`, `node_selection`, `sticky_assignment`)
 
 Если в `description` есть произвольный текст, он сохраняется, а state-блок обновляется/пере-записывается отдельно внизу.
 
 
 ## Acunetix pool (multi-instance)
 
-Для распределения scan job между несколькими Acunetix-инстансами используйте переменную:
+Для распределения scan job между несколькими Acunetix-инстансами используйте переменные:
 
 - `ACUNETIX_MAX_SCANS_PER_NODE` — глобальный лимит активных сессий на ноду (по умолчанию `5`).
-- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional).
+- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional), `weight` (optional, для policy `weighted`).
+- `ACUNETIX_NODE_SELECTION_POLICY` — фиксирует правило выбора ноды: `least_loaded` (по умолчанию) или `weighted`.
+- `ACUNETIX_STICKY_ASSIGNMENT` — sticky назначение ноды на PT (`true` по умолчанию).
 
 Пример:
 
@@ -163,6 +166,16 @@ ACUNETIX_MAX_SCANS_PER_NODE=5
 ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","token":"token1","max_scans_per_node":8},{"name":"acu-2","endpoint":"https://acu-2.local:3443","token":"token2"}]
 ```
 
-`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Назначение выполняется на наименее загруженные healthy-ноды, недоступные ноды автоматически исключаются из текущего распределения и возвращаются в пул после восстановления на следующем запуске.
+`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты.
+
+Политика диспетчеризации:
+
+- **fairness:** `round_robin_by_pt` — очередь формируется по PT, чтобы один крупный PT не занял все доступные слоты.
+- **node selection:** фиксируется через `ACUNETIX_NODE_SELECTION_POLICY` (`least_loaded` или `weighted`).
+- **sticky assignment:** при `ACUNETIX_STICKY_ASSIGNMENT=true` PT стабильно тяготеет к одной и той же Acunetix-ноде между запусками (с fallback на policy selection при недоступности/переполнении sticky-ноды).
+
+В итоговом output workflow добавлены поля `dispatch_policy` и `dispatch_by_pt`, а для каждого dispatch item — его policy snapshot.
+
+`WF_Dojo_Master` пишет policy snapshot в PT-state (`acu_dispatch_policy`) при переводе PT в `acu_running`, а также пробрасывает policy в `queue_wf_d_pt_acunetixscan`/итог плана.
 
 `WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job.
