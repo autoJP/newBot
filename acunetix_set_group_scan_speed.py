@@ -128,8 +128,10 @@ def acu_set_target_scan_speed(
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--acu-base-url", dest="acu_base_url", required=True)
-    ap.add_argument("--acu-api-token", dest="acu_api_token", required=True)
+    ap.add_argument("--acu-base-url", "--acu-endpoint", dest="acu_base_url")
+    ap.add_argument("--acu-api-token", "--acu-token", dest="acu_api_token")
+    ap.add_argument("--acu-node-name", dest="acu_node_name", default="")
+    ap.add_argument("--acu-node-json", dest="acu_node_json", default="")
 
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--group-id", dest="group_id")
@@ -150,8 +152,29 @@ def main() -> None:
 
     args = ap.parse_args()
 
+
+    acu_base_url = (args.acu_base_url or "").strip()
+    acu_api_token = (args.acu_api_token or "").strip()
+    acu_node_name = (args.acu_node_name or "").strip()
+
+    if args.acu_node_json:
+        try:
+            node = json.loads(args.acu_node_json)
+            if isinstance(node, dict):
+                acu_base_url = acu_base_url or str(node.get("endpoint") or "").strip()
+                acu_api_token = acu_api_token or str(node.get("token") or "").strip()
+                acu_node_name = acu_node_name or str(node.get("name") or "").strip()
+        except Exception as e:
+            raise RuntimeError(f"invalid --acu-node-json: {e}")
+
+    if not acu_base_url:
+        raise RuntimeError("Acunetix endpoint is required: pass --acu-endpoint/--acu-base-url or --acu-node-json")
+    if not acu_api_token:
+        raise RuntimeError("Acunetix token is required: pass --acu-token/--acu-api-token or --acu-node-json")
+
     debug: Dict[str, Any] = {
-        "acu_base_url": args.acu_base_url,
+        "acu_base_url": acu_base_url,
+        "acu_node_name": acu_node_name,
         "group_id_arg": args.group_id,
         "group_name_arg": args.group_name,
         "scan_speed": args.scan_speed,
@@ -166,7 +189,7 @@ def main() -> None:
         group_info: Optional[Dict[str, Any]] = None
 
         if not group_id:
-            groups = acu_list_groups(s, args.acu_base_url, args.acu_api_token)
+            groups = acu_list_groups(s, acu_base_url, acu_api_token)
             debug["groups_total"] = len(groups)
             g = acu_find_group_by_name(groups, args.group_name)
             if not g:
@@ -190,7 +213,7 @@ def main() -> None:
         debug["group_info"] = group_info
 
         # 2. Получаем все target_id в группе
-        target_ids = acu_get_group_targets(s, args.acu_base_url, args.acu_api_token, group_id)
+        target_ids = acu_get_group_targets(s, acu_base_url, acu_api_token, group_id)
         debug["targets_in_group_count"] = len(target_ids)
         debug["targets_in_group"] = target_ids
 
@@ -211,7 +234,7 @@ def main() -> None:
         # 3. Для каждого target — проверяем текущий scan_speed и при необходимости меняем
         for tid in target_ids:
             try:
-                cfg = acu_get_target_configuration(s, args.acu_base_url, args.acu_api_token, tid)
+                cfg = acu_get_target_configuration(s, acu_base_url, acu_api_token, tid)
                 current = cfg.get("scan_speed")
                 if current == args.scan_speed:
                     skipped.append(tid)
@@ -221,7 +244,7 @@ def main() -> None:
                     changed.append(tid)
                     continue
 
-                r = acu_set_target_scan_speed(s, args.acu_base_url, args.acu_api_token, tid, args.scan_speed)
+                r = acu_set_target_scan_speed(s, acu_base_url, acu_api_token, tid, args.scan_speed)
                 if r.status_code not in (200, 204):
                     errors.append({
                         "target_id": tid,
