@@ -184,6 +184,59 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 `WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job.
 
+### Явные payload для `executeWorkflow`
+
+Во всех очередях, которые `WF_Dojo_Master` передает в `executeWorkflow`, теперь используются явные поля:
+
+- `pt_id` — обязательный идентификатор Product Type (дублируется с `product_type_id` для совместимости).
+- `stage` — ожидаемая стадия subworkflow (`subdomains`, `nmap`, `targets`, `acu`).
+- `job_metadata` — служебный объект (`source_workflow`, `queue`, `transition`, `lock_owner`).
+- `selected_acu_node` — выбранная Acunetix-нода (для ACU-ветки; до диспетчеризации `null`, после диспетчеризации содержит `name/endpoint/token`).
+
+Минимальные схемы:
+
+```json
+{
+  "pt_id": 123,
+  "product_type_id": 123,
+  "stage": "subdomains|nmap|targets|acu",
+  "job_metadata": {
+    "source_workflow": "WF_Dojo_Master",
+    "queue": "wf_*",
+    "transition": "old_state->new_state",
+    "lock_owner": "dojo-master:*"
+  }
+}
+```
+
+Для ACU-диспетчеризации (`WF_D_PT_AcunetixScan -> WF_D_ProductScan`) payload дополняется:
+
+```json
+{
+  "selected_acu_node": {
+    "name": "acu-1",
+    "endpoint": "https://acu-1.local:3443",
+    "token": "***"
+  }
+}
+```
+
+Правило интерпретации тегов продуктов:
+
+- product-теги (`targets:ready`, `acunetix:active`) больше не являются gate-условием для ACU-запуска;
+- они сохраняются как вспомогательные `tag_signals` в dispatch item для диагностики/аналитики.
+
+
+### Правила переходов между стадиями
+
+- `new|error -> subdomains_running` (если есть слот по `SUBDOMAINS_CONCURRENCY`).
+- `subdomains_done|nmap_running -> nmap_running` (батч jobs до `NMAP_CONCURRENCY`).
+- `nmap_done -> targets_ready`.
+- `targets_ready -> acu_running`.
+- `acu_running -> done` после завершения scan/report/import в `WF_D_ProductScan`.
+
+Стадия в payload (`stage`) должна совпадать с ожидаемой стадией subworkflow; несоответствие трактуется как некорректный вход orchestration.
+
 
 ### Retry policy по стадиям
 
