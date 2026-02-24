@@ -9,13 +9,13 @@ Process Nmap XML for a *single* DefectDojo Product Type:
  - skip ports in EXCLUDE_PORTS (default 80,443)
  - create new Product entries only for IP:port targets that do not already exist in that product_type
  - set internet_accessible = true for created products
- - merge/update a dedicated Acunetix targets block in product_type.description:
+ - build a dedicated targets artifact file with strict markers/parser:
      - main domain (canonical, without www), one line
      - each internet_accessible non-IP product (canonical host without www)
      - each IP:port target as <proto>://IP:port, <product_type.name>
 
-The PT_STATE_JSON block is intentionally NOT rewritten here. State-machine workflows
-remain the only owners of PT_STATE_JSON_START/PT_STATE_JSON_END.
+The PT_STATE_JSON block is intentionally NOT touched here. State-machine workflows
+remain the only owners of PT_STATE_JSON_START/PT_STATE_JSON_END in product_type.description.
 
 Suitable for use from n8n via Execute Command with JSON summary on stdout.
 """
@@ -31,8 +31,9 @@ import xml.etree.ElementTree as ET
 from ipaddress import ip_address
 
 API_TIMEOUT = 30
-TARGET_BLOCK_START = "PT_ACUNETIX_TARGETS_START"
-TARGET_BLOCK_END = "PT_ACUNETIX_TARGETS_END"
+TARGET_ARTIFACT_BLOCK_START = "PT_TARGET_LIST_START"
+TARGET_ARTIFACT_BLOCK_END = "PT_TARGET_LIST_END"
+TARGET_LINE_RE = re.compile(r"^(https?://[^,\s]+),\s+(.+)$")
 PT_STATE_OWNER = "WF_Dojo_Master.json"
 
 
@@ -40,7 +41,7 @@ PT_STATE_OWNER = "WF_Dojo_Master.json"
 
 def build_arg_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Process Nmap XML for a single DefectDojo product_type (IP-only products) and update product_type description"
+        description="Process Nmap XML for a single DefectDojo product_type (IP-only products) and build targets artifact"
     )
     p.add_argument(
         "--base-url",
@@ -75,6 +76,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not write to the API; only simulate actions",
     )
+    p.add_argument(
+        "--targets-artifact-dir",
+        default=os.environ.get("PT_TARGETS_ARTIFACT_DIR", "/tmp"),
+        help="Directory for PT targets artifacts (default /tmp)",
+    )
     return p
 
 
@@ -87,6 +93,7 @@ XML_DIR = args.xml_dir
 EXCLUDE_PORTS: Set[int] = {int(p.strip()) for p in args.exclude_ports.split(",") if p.strip().isdigit()}
 DRY_RUN = args.dry_run
 PT_ID = args.product_type_id
+TARGETS_ARTIFACT_DIR = args.targets_artifact_dir
 
 if not API_TOKEN:
     print("ERROR: DOJO_API_TOKEN not set and --api-token not provided", file=sys.stderr)
@@ -201,37 +208,37 @@ def parse_nmap_xml_for_ips(filename: str, exclude_ports: Set[int]) -> List[Tuple
     return result
 
 
-def _upsert_marked_block(text: str, block_start: str, block_end: str, body: str) -> str:
-    """
-    Merge-update a marked block in text while preserving all other content byte-for-byte.
-    If block exists, only that block is replaced in place.
-    If block is absent, new block is appended to the end.
-    """
-    base_text = text if isinstance(text, str) else ""
-    pattern = re.compile(rf"{re.escape(block_start)}\n.*?\n{re.escape(block_end)}", re.DOTALL)
-    new_block = f"{block_start}\n{body}\n{block_end}"
-
-    if pattern.search(base_text):
-        return pattern.sub(new_block, base_text, count=1)
-
-    if not base_text:
-        return new_block
-
-    separator = "\n\n" if not base_text.endswith("\n") else "\n"
-    return f"{base_text}{separator}{new_block}"
+def render_targets_artifact(target_lines: List[str]) -> str:
+    body = "\n".join(target_lines)
+    return f"{TARGET_ARTIFACT_BLOCK_START}\n{body}\n{TARGET_ARTIFACT_BLOCK_END}\n"
 
 
-def merge_targets_into_description(current_description: str, target_lines: List[str]) -> str:
-    """
-    Update only Acunetix-targets service block.
-    PT_STATE_JSON_START/PT_STATE_JSON_END block remains under a single owner
-    (WF_Dojo_Master.json) and is preserved unchanged.
-    """
-    if not target_lines:
-        return current_description if isinstance(current_description, str) else ""
+def parse_targets_artifact(content: str) -> List[str]:
+    if not isinstance(content, str):
+        raise ValueError("artifact content must be a string")
+    pattern = re.compile(
+        rf"^\s*{re.escape(TARGET_ARTIFACT_BLOCK_START)}\n(.*?)\n{re.escape(TARGET_ARTIFACT_BLOCK_END)}\s*$",
+        re.DOTALL,
+    )
+    match = pattern.match(content)
+    if not match:
+        raise ValueError("artifact markers are missing or malformed")
 
-    targets_body = "Acunetix targets:\n" + "\n".join(target_lines)
-    return _upsert_marked_block(current_description, TARGET_BLOCK_START, TARGET_BLOCK_END, targets_body)
+    lines = [ln.strip() for ln in match.group(1).splitlines() if ln.strip()]
+    for line in lines:
+        if not TARGET_LINE_RE.match(line):
+            raise ValueError(f"invalid target line format: {line}")
+    return lines
+
+
+def write_targets_artifact(pt_id: int, lines: List[str]) -> str:
+    os.makedirs(TARGETS_ARTIFACT_DIR, exist_ok=True)
+    artifact_path = os.path.join(TARGETS_ARTIFACT_DIR, f"pt_targets_{pt_id}.txt")
+    content = render_targets_artifact(lines)
+    parse_targets_artifact(content)  # strict self-check before write
+    with open(artifact_path, "w", encoding="utf-8") as f:
+        f.write(content)
+    return artifact_path
 
 
 # ---------- Core processing for single product_type ----------
@@ -241,10 +248,12 @@ def process_single_product_type(pt_id: int) -> dict:
         "product_type_id": pt_id,
         "pt_state_owner": PT_STATE_OWNER,
         "xml_dir": XML_DIR,
+        "targets_artifact_dir": TARGETS_ARTIFACT_DIR,
         "exclude_ports": sorted(list(EXCLUDE_PORTS)),
         "dry_run": DRY_RUN,
         "created_ip_products": [],
         "updated_description": False,
+        "targets_artifact_path": None,
     }
 
     # 1) Load product_type
@@ -347,20 +356,13 @@ def process_single_product_type(pt_id: int) -> dict:
             seen.add(line)
             unique_lines.append(line)
 
-    current_description = pt.get("description", "")
-    description_text = merge_targets_into_description(current_description, unique_lines)
-
-    # 7) Patch product_type.description
-    if description_text == (current_description if isinstance(current_description, str) else ""):
-        summary["updated_description"] = False
-        summary["description_unchanged"] = True
-    else:
-        try:
-            api_patch(f"/product_types/{pt_id}/", {"description": description_text})
-            summary["updated_description"] = True
-        except requests.HTTPError as e:
-            summary["updated_description"] = False
-            summary["error"] = f"failed_update_description: {e}"
+    # 7) Build separate target-list artifact and never patch PT description/state block here
+    try:
+        artifact_path = write_targets_artifact(pt_id, unique_lines)
+        summary["targets_artifact_path"] = artifact_path
+        summary["targets_artifact_count"] = len(unique_lines)
+    except Exception as e:
+        summary["error"] = f"failed_write_targets_artifact: {e}"
 
     return summary
 
