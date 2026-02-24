@@ -111,7 +111,7 @@
 
 Оркестратор (`WF_Dojo_Master`) использует лимиты из `.env`:
 
-- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных **PT jobs** в `subdomains_running` (по умолчанию `5`, если переменная не задана).
+- `SUBDOMAINS_CONCURRENCY` — максимум одновременно активных **внутренних subdomain jobs** на стадии `subdomains` (по умолчанию `5`). Ограничение применяется к суммарному значению `counters.subdomains_running` в PT-state, а не только к количеству PT в `subdomains_running`.
 - `PT_LOCK_TTL_MINUTES` — TTL блокировки PT-state (`lock_owner`, `lock_until`) для защиты от дублей при параллельных trigger.
 - `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES` — TTL для зависших PT в `subdomains_running`; при истечении PT переводится в `error` для автоматического восстановления после рестарта.
 - `NMAP_CONCURRENCY` — ограничение количества Product-задач в этапе nmap за проход.
@@ -156,6 +156,7 @@ PT_STATE_JSON_END
 - `version` — версия формата (сейчас `1`)
 - `state` — текущее состояние PT
 - `counters` — счетчики этапов (`subdomains_runs`, `nmap_runs`, `targets_runs`, `acu_runs`)
+- `subdomains_total` / `subdomains_done` / `subdomains_failed` / `subdomains_running` — счетчики внутренней subdomains-стадии для проверяемого завершения этапа на уровне PT.
 - `last_update` — время последнего обновления (ISO8601, UTC)
 - `retry_count` — число ретраев
 - `last_error` — последняя ошибка (строка или `null`)
