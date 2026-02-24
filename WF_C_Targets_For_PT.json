@@ -87,7 +87,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import json\n\n# n8n подаёт данные в переменной `items`\nitem = items[0]  # берём первый элемент\nstdout = item.get(\"json\", {}).get(\"stdout\", \"\")\n\ntry:\n    parsed = json.loads(stdout)\nexcept Exception as e:\n    raise Exception(f\"Не удалось распарсить stdout как JSON:\\n{stdout}\\nОшибка: {e}\")\n\n# Формируем новый объект вывода\nreturn [{\n    \"json\": {\n        \"group_id\": parsed.get(\"group_id\"),\n        \"full_output\": parsed\n    }\n}]\n"
+        "pythonCode": "import json\n\n# n8n подаёт данные в переменной `items`\nitem = items[0]  # берём первый элемент\nstdout = item.get(\"json\", {}).get(\"stdout\", \"\")\n\ntry:\n    parsed = json.loads(stdout)\nexcept Exception as e:\n    raise Exception(f\"Не удалось распарсить stdout как JSON:\\n{stdout}\\nОшибка: {e}\")\n\n# Формируем новый объект вывода\nreturn [{\n    \"json\": {\n        \"group_id\": parsed.get(\"group_id\"),\n        \"target_mapping\": parsed.get(\"target_mapping\", {}),\n        \"mapping_output\": parsed.get(\"mapping_output\", {}),\n        \"full_output\": parsed\n    }\n}]\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
