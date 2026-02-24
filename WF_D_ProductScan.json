@@ -116,7 +116,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "trigger = $node['Validate Acunetix Node Input'].json or {}\nproduct = $node['Get Product'].json\nexisting = $json.get('scans', []) or []\n\nendpoint = str(trigger.get('acunetix_endpoint') or '')\nnode_name = str(trigger.get('acunetix_node_name') or 'acu-selected')\npt_id = int(trigger.get('pt_id'))\ntarget_uuid = str(trigger.get('target_id') or '')\n\nbase_payload = {\n    'pt_id': pt_id,\n    'product_id': product.get('id'),\n    'product_name': product.get('name'),\n    'acunetix_node_name': node_name,\n    'acunetix_endpoint': endpoint,\n    'selected_acu_node': {'name': node_name, 'endpoint': endpoint},\n    'target_id': target_uuid,\n    'acunetix_target_id': target_uuid,\n}\n\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{'json': {\n            **base_payload,\n            'skip': True,\n            'reason': 'scan already active',\n            'scan_id': s.get('scan_id'),\n        }}]\n\nreturn [{'json': {\n    **base_payload,\n    'skip': False,\n    'target_url': f\"https://{product.get('name')}\",\n}}]"
+        "pythonCode": "existing = $json.get('scans', []) or []\n\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{'json': {\n            'skip': True,\n            'reason': 'scan already active',\n            'scan_id': s.get('scan_id'),\n        }}]\n\nreturn [{'json': {\n    'skip': False,\n}}]"
       },
       "id": "p-gate",
       "name": "Duplicate Guard (Python)",
@@ -152,7 +152,7 @@
         "url": "={{ ($json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/scans' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"target_id\": $node['Duplicate Guard (Python)'].json.acunetix_target_id, \"profile_id\": \"11111111-1111-1111-1111-111111111111\", \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}}",
+        "jsonBody": "={\"target_id\": $node['Finalize Scan Payload Contract'].json.acunetix_target_id, \"profile_id\": \"11111111-1111-1111-1111-111111111111\", \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}}",
         "headerParametersUi": {
           "parameter": [
             {
@@ -217,7 +217,7 @@
     },
     {
       "parameters": {
-        "url": "={{ ($node['Duplicate Guard (Python)'].json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/scans/' + $node['Start Scan'].json.scan_id }}",
+        "url": "={{ ($node['Finalize Scan Payload Contract'].json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/scans/' + $node['Start Scan'].json.scan_id }}",
         "headerParametersUi": {
           "parameter": [
             {
@@ -304,7 +304,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ ($node['Duplicate Guard (Python)'].json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/reports' }}",
+        "url": "={{ ($node['Finalize Scan Payload Contract'].json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/reports' }}",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\"template_id\": \"11111111-1111-1111-1111-111111111111\", \"source\": {\"list_type\": \"scans\", \"id_list\": [$node['Start Scan'].json.scan_id]}}",
@@ -364,7 +364,7 @@
             },
             {
               "name": "product",
-              "value": "={{ $node['Duplicate Guard (Python)'].json.product_id }}"
+              "value": "={{ $node['Finalize Scan Payload Contract'].json.product_id }}"
             },
             {
               "name": "active",
@@ -536,6 +536,79 @@
         -500,
         320
       ]
+    },
+    {
+      "parameters": {
+        "keepOnlySet": false,
+        "values": {
+          "boolean": [
+            {
+              "name": "skip",
+              "value": "={{ !!$json.skip }}"
+            }
+          ],
+          "string": [
+            {
+              "name": "reason",
+              "value": "={{ ($json.reason || '').toString() }}"
+            },
+            {
+              "name": "scan_id",
+              "value": "={{ ($json.scan_id || '').toString() }}"
+            },
+            {
+              "name": "product_id",
+              "value": "={{ ($node['Get Product'].json.id || '').toString() }}"
+            },
+            {
+              "name": "product_name",
+              "value": "={{ ($node['Get Product'].json.name || '').toString() }}"
+            },
+            {
+              "name": "pt_id",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.pt_id || '').toString() }}"
+            },
+            {
+              "name": "acunetix_node_name",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_node_name || '').toString().trim() }}"
+            },
+            {
+              "name": "acunetix_endpoint",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_endpoint || '').toString().trim().replace(/\\/+$/, '') }}"
+            },
+            {
+              "name": "target_id",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.target_id || '').toString().trim() }}"
+            },
+            {
+              "name": "acunetix_target_id",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_target_id || '').toString().trim() }}"
+            },
+            {
+              "name": "target_url",
+              "value": "={{ 'https://' + ($node['Get Product'].json.name || '') }}"
+            }
+          ],
+          "object": [
+            {
+              "name": "selected_acu_node",
+              "value": {
+                "name": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_node_name || '').toString().trim() }}",
+                "endpoint": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_endpoint || '').toString().trim().replace(/\\/+$/, '') }}"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "p-finalize-payload-contract",
+      "name": "Finalize Scan Payload Contract",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -420,
+        220
+      ]
     }
   ],
   "connections": {
@@ -576,7 +649,7 @@
       "main": [
         [
           {
-            "node": "Skip new launch?",
+            "node": "Finalize Scan Payload Contract",
             "type": "main",
             "index": 0
           }
@@ -774,6 +847,17 @@
       ]
     },
     "Prepare Emergency Fallback": {
+      "main": [
+        [
+          {
+            "node": "Skip new launch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalize Scan Payload Contract": {
       "main": [
         [
           {
