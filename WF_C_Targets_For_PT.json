@@ -19,6 +19,18 @@
             {
               "name": "product_type_id",
               "value": "={{ $json.product_type_id }}"
+            },
+            {
+              "name": "acunetix_endpoint",
+              "value": "={{ $json.acunetix_endpoint || $json.selected_acu_node?.endpoint || '' }}"
+            },
+            {
+              "name": "acunetix_token",
+              "value": "={{ $json.acunetix_token || $json.selected_acu_node?.token || '' }}"
+            },
+            {
+              "name": "acunetix_node_name",
+              "value": "={{ $json.acunetix_node_name || $json.selected_acu_node?.name || '' }}"
             }
           ]
         },
@@ -48,7 +60,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-base-url {{$env.ACUNETIX_BASE_URL}} \\\n  --acu-api-token {{$env.ACUNETIX_API_TOKEN}}\n "
+        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-endpoint {{ $('Validate Acunetix Node').item.json.acunetix_endpoint }} \\\n  --acu-token {{ $('Validate Acunetix Node').item.json.acunetix_token }} \\\n  --acu-node-name {{ $('Validate Acunetix Node').item.json.acunetix_node_name || 'unspecified' }}\n "
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -61,7 +73,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/acunetix_set_group_scan_speed.py \\\n  --acu-base-url {{$env.ACUNETIX_BASE_URL}} \\\n  --acu-api-token {{$env.ACUNETIX_API_TOKEN}} \\\n  --group-id {{ $json.group_id }} \\\n  --scan-speed sequential\n"
+        "command": "=python3 /opt/tools/acunetix_set_group_scan_speed.py \\\n  --acu-endpoint {{ $('Validate Acunetix Node').item.json.acunetix_endpoint }} \\\n  --acu-token {{ $('Validate Acunetix Node').item.json.acunetix_token }} \\\n  --acu-node-name {{ $('Validate Acunetix Node').item.json.acunetix_node_name || 'unspecified' }} \\\n  --group-id {{ $json.group_id }} \\\n  --scan-speed sequential\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -99,6 +111,20 @@
       ],
       "id": "c-validate-product-type-id",
       "name": "Validate Product Type ID"
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "item = $json\n\nendpoint = (item.get('acunetix_endpoint') or '').strip()\ntoken = (item.get('acunetix_token') or '').strip()\nnode_name = (item.get('acunetix_node_name') or '').strip()\n\nif not endpoint:\n    raise Exception('acunetix_endpoint is required. Pass selected node endpoint from orchestrator/dispatcher.')\nif not token:\n    raise Exception('acunetix_token is required. Pass selected node token from orchestrator/dispatcher.')\n\nreturn [{\n    'json': {\n        **item,\n        'acunetix_endpoint': endpoint,\n        'acunetix_token': token,\n        'acunetix_node_name': node_name,\n    }\n}]"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        0
+      ],
+      "id": "c-validate-acunetix-node",
+      "name": "Validate Acunetix Node"
     }
   ],
   "pinData": {},
@@ -159,6 +185,17 @@
       ]
     },
     "Validate Product Type ID": {
+      "main": [
+        [
+          {
+            "node": "Validate Acunetix Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Acunetix Node": {
       "main": [
         [
           {

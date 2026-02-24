@@ -219,15 +219,37 @@ def main() -> None:
     ap.add_argument("--dojo-base-url", required=True)
     ap.add_argument("--dojo-api-token", required=True)
     ap.add_argument("--product-type-id", "--pt-id", dest="pt_id", type=int, required=True)
-    ap.add_argument("--acu-base-url", required=True)
-    ap.add_argument("--acu-api-token", required=True)
+    ap.add_argument("--acu-base-url", "--acu-endpoint", dest="acu_base_url")
+    ap.add_argument("--acu-api-token", "--acu-token", dest="acu_api_token")
+    ap.add_argument("--acu-node-name", default="")
+    ap.add_argument("--acu-node-json", default="")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
+
+    acu_base_url = (args.acu_base_url or "").strip()
+    acu_api_token = (args.acu_api_token or "").strip()
+    acu_node_name = (args.acu_node_name or "").strip()
+
+    if args.acu_node_json:
+        try:
+            node = json.loads(args.acu_node_json)
+            if isinstance(node, dict):
+                acu_base_url = acu_base_url or str(node.get("endpoint") or "").strip()
+                acu_api_token = acu_api_token or str(node.get("token") or "").strip()
+                acu_node_name = acu_node_name or str(node.get("name") or "").strip()
+        except Exception as e:
+            raise RuntimeError(f"invalid --acu-node-json: {e}")
+
+    if not acu_base_url:
+        raise RuntimeError("Acunetix endpoint is required: pass --acu-endpoint/--acu-base-url or --acu-node-json")
+    if not acu_api_token:
+        raise RuntimeError("Acunetix token is required: pass --acu-token/--acu-api-token or --acu-node-json")
 
     debug: Dict[str, Any] = {
         "pt_id": args.pt_id,
         "dojo_base_url": args.dojo_base_url,
-        "acu_base_url": args.acu_base_url,
+        "acu_base_url": acu_base_url,
+        "acu_node_name": acu_node_name,
         "dry_run": bool(args.dry_run),
     }
 
@@ -256,7 +278,7 @@ def main() -> None:
         # ---- Acunetix ----
         acu_s = make_session(verify=False)
 
-        groups = acu_list_groups(acu_s, args.acu_base_url, args.acu_api_token)
+        groups = acu_list_groups(acu_s, acu_base_url, acu_api_token)
         g = acu_find_group_by_name(groups, pt_name)
 
         if g:
@@ -269,8 +291,8 @@ def main() -> None:
             else:
                 created = acu_create_group(
                     acu_s,
-                    args.acu_base_url,
-                    args.acu_api_token,
+                    acu_base_url,
+                    acu_api_token,
                     pt_name,
                     f"Dojo PT #{pt.get('id')} ({pt_name})",
                 )
@@ -301,8 +323,8 @@ def main() -> None:
 
         add_result = acu_targets_add(
             acu_s,
-            args.acu_base_url,
-            args.acu_api_token,
+            acu_base_url,
+            acu_api_token,
             group_id,
             pt_name,
             urls,
