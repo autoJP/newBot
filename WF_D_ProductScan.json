@@ -108,7 +108,7 @@
         "url": "={{ ($json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/scans' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"target_id\": $json.target_id, \"profile_id\": \"11111111-1111-1111-1111-111111111111\", \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}}",
+        "jsonBody": "={\"target_id\": $node['Duplicate Guard (Python)'].json.target_id, \"profile_id\": \"11111111-1111-1111-1111-111111111111\", \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}}",
         "headerParametersUi": {
           "parameter": [
             {
