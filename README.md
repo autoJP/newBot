@@ -94,3 +94,40 @@
 - быстрый smoke-check перед массовым запуском по расписанию.
 
 Практика: запускать `WF_E_System_Health` перед включением Cron и после изменений credentials/переменных окружения.
+
+## PT state-machine в `product_type.description`
+
+В оркестрации используется конечный набор состояний PT:
+
+- `new`
+- `subdomains_running`
+- `subdomains_done`
+- `nmap_running`
+- `nmap_done`
+- `targets_ready`
+- `acu_running`
+- `done`
+- `error`
+
+`WF_Dojo_Master` читает состояние из `product_type.description` и пишет обновления через DefectDojo API (`PATCH /product_types/{id}/`).
+
+### Единый формат хранения
+
+Состояние хранится как JSON-блок внутри `description` между маркерами:
+
+```text
+PT_STATE_JSON_START
+{"version":1,"state":"nmap_running","counters":{"nmap_runs":2},"last_update":"2026-01-01T10:00:00+00:00","retry_count":0,"last_error":null}
+PT_STATE_JSON_END
+```
+
+Поля блока:
+
+- `version` — версия формата (сейчас `1`)
+- `state` — текущее состояние PT
+- `counters` — счетчики этапов (`subdomains_runs`, `nmap_runs`, `targets_runs`, `acu_runs`)
+- `last_update` — время последнего обновления (ISO8601, UTC)
+- `retry_count` — число ретраев
+- `last_error` — последняя ошибка (строка или `null`)
+
+Если в `description` есть произвольный текст, он сохраняется, а state-блок обновляется/пере-записывается отдельно внизу.
