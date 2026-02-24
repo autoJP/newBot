@@ -202,48 +202,37 @@ def parse_nmap_xml_for_ips(filename: str, exclude_ports: Set[int]) -> List[Tuple
     return result
 
 
-def _remove_block(text: str, block_start: str, block_end: str) -> str:
-    if not text:
-        return ""
-    pattern = re.compile(rf"\n?{re.escape(block_start)}\n.*?\n{re.escape(block_end)}\n?", re.DOTALL)
-    cleaned = re.sub(pattern, "\n", text)
-    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
-    return cleaned.strip()
+def _upsert_marked_block(text: str, block_start: str, block_end: str, body: str) -> str:
+    """
+    Merge-update a marked block in text while preserving all other content byte-for-byte.
+    If block exists, only that block is replaced in place.
+    If block is absent, new block is appended to the end.
+    """
+    base_text = text if isinstance(text, str) else ""
+    pattern = re.compile(rf"{re.escape(block_start)}\n.*?\n{re.escape(block_end)}", re.DOTALL)
+    new_block = f"{block_start}\n{body}\n{block_end}"
+
+    if pattern.search(base_text):
+        return pattern.sub(new_block, base_text, count=1)
+
+    if not base_text:
+        return new_block
+
+    separator = "\n\n" if not base_text.endswith("\n") else "\n"
+    return f"{base_text}{separator}{new_block}"
 
 
 def merge_targets_into_description(current_description: str, target_lines: List[str]) -> str:
     """
-    Update only Acunetix-targets service block, preserving PT_STATE_JSON block as-is.
+    Update only Acunetix-targets service block.
+    PT_STATE_JSON_START/PT_STATE_JSON_END block remains under WF_Dojo_Master ownership
+    and is preserved unchanged.
     """
-    base_text = current_description if isinstance(current_description, str) else ""
-    without_targets = _remove_block(base_text, TARGET_BLOCK_START, TARGET_BLOCK_END)
-
     if not target_lines:
-        return without_targets
+        return current_description if isinstance(current_description, str) else ""
 
     targets_body = "Acunetix targets:\n" + "\n".join(target_lines)
-    target_block = f"{TARGET_BLOCK_START}\n{targets_body}\n{TARGET_BLOCK_END}"
-
-    state_pattern = re.compile(
-        rf"{re.escape(STATE_BLOCK_START)}\n.*?\n{re.escape(STATE_BLOCK_END)}",
-        re.DOTALL,
-    )
-    state_match = state_pattern.search(without_targets)
-    if not state_match:
-        return (without_targets + "\n\n" + target_block).strip() if without_targets else target_block
-
-    before_state = without_targets[:state_match.start()].rstrip()
-    state_block = state_match.group(0)
-    after_state = without_targets[state_match.end():].strip()
-
-    parts: List[str] = []
-    if before_state:
-        parts.append(before_state)
-    parts.append(target_block)
-    parts.append(state_block)
-    if after_state:
-        parts.append(after_state)
-    return "\n\n".join(parts)
+    return _upsert_marked_block(current_description, TARGET_BLOCK_START, TARGET_BLOCK_END, targets_body)
 
 
 # ---------- Core processing for single product_type ----------
