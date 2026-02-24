@@ -499,12 +499,16 @@
           "id": "mGl4PbJkKfeJbTg8",
           "name": "Header Auth account"
         }
-      }
+      },
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "continueOnFail": true
     },
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import json\nimport re\nimport os\nfrom datetime import datetime, timezone\n\nBLOCK_START = \"PT_STATE_JSON_START\"\nBLOCK_END = \"PT_STATE_JSON_END\"\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\ndef parse_state(description):\n    if not isinstance(description, str):\n        return {}\n    m = re.search(rf\"{BLOCK_START}\\n(.*?)\\n{BLOCK_END}\", description, re.DOTALL)\n    if not m:\n        return {}\n    try:\n        state = json.loads(m.group(1).strip())\n        return state if isinstance(state, dict) else {}\n    except Exception:\n        return {}\n\ndef build_description(base_description, state_payload):\n    text = base_description if isinstance(base_description, str) else ''\n    pattern = re.compile(rf\"\\n?{BLOCK_START}\\n.*?\\n{BLOCK_END}\\n?\", re.DOTALL)\n    clean = re.sub(pattern, \"\\n\", text).rstrip()\n    block = f\"{BLOCK_START}\\n{json.dumps(state_payload, ensure_ascii=False, sort_keys=True)}\\n{BLOCK_END}\"\n    if clean:\n        return clean + \"\\n\\n\" + block\n    return block\n\nitems = _input.all()\nif not items:\n    return []\n\nmax_retries = int(os.getenv('PT_RETRY_NMAP_MAX', '3') or 3)\nnow = datetime.now(timezone.utc).isoformat()\nby_pt = {}\nfor item in items:\n    row = item.json if isinstance(item.json, dict) else {}\n    try:\n        pt_id = int(read_key(row, 'product_type_id'))\n    except Exception:\n        continue\n\n    agg = by_pt.get(pt_id)\n    if agg is None:\n        agg = {\n            'description': read_key(row, 'nmap_state_description', ''),\n            'nmap_total': int(read_key(row, 'nmap_total', 0) or 0),\n            'nmap_done': int(read_key(row, 'nmap_done_initial', 0) or 0),\n            'nmap_failed': int(read_key(row, 'nmap_failed_initial', 0) or 0),\n            'done_inc': 0,\n            'failed_inc': 0,\n            'errors': [],\n        }\n        by_pt[pt_id] = agg\n\n    status = str(read_key(row, 'workflow_status', 'ok') or 'ok')\n    if status == 'ok':\n        agg['done_inc'] += 1\n    else:\n        agg['failed_inc'] += 1\n        err = str(read_key(row, 'error_message', '') or '').strip()\n        if err:\n            agg['errors'].append(err)\n\nout = []\nfor pt_id, agg in by_pt.items():\n    state_obj = parse_state(agg['description'])\n    counters = read_key(state_obj, 'counters', {})\n    if not isinstance(counters, dict):\n        counters = {}\n\n    nmap_total = agg['nmap_total'] if agg['nmap_total'] > 0 else int(counters.get('nmap_total', 0) or 0)\n    nmap_done = int(agg['nmap_done']) + int(agg['done_inc'])\n    nmap_failed = int(agg['nmap_failed']) + int(agg['failed_inc'])\n    processed_total = nmap_done + nmap_failed\n\n    counters['nmap_total'] = nmap_total\n    counters['nmap_done'] = nmap_done\n    counters['nmap_failed'] = nmap_failed\n\n    retry_count = int(read_key(state_obj, 'retry_count', 0) or 0)\n    last_error = read_key(state_obj, 'last_error')\n\n    if agg['failed_inc'] > 0:\n        retry_count += 1\n        diag = '; '.join([e for e in agg['errors'] if e][:2])\n        if not diag:\n            diag = f'nmap stage reported {agg[\"failed_inc\"]} failed job(s)'\n        last_error = f'NMAP error: {diag}'\n\n    all_nmap_jobs_processed = nmap_total == 0 or processed_total >= nmap_total\n    has_nmap_failures = nmap_failed > 0\n    has_pending_nmap_jobs = nmap_total > 0 and processed_total < nmap_total\n    retries_exhausted = retry_count >= max_retries\n    failure_mode = 'none'\n\n    if has_nmap_failures:\n        if retries_exhausted and not has_pending_nmap_jobs:\n            next_state = 'error'\n            failure_mode = 'terminal'\n        else:\n            next_state = 'nmap_running'\n            failure_mode = 'partial_retryable'\n    else:\n        next_state = 'nmap_done' if all_nmap_jobs_processed else 'nmap_running'\n        if next_state == 'nmap_done':\n            last_error = None\n\n    updated_state = {\n        'version': int(read_key(state_obj, 'version', 1) or 1),\n        'state': next_state,\n        'counters': counters,\n        'last_update': now,\n        'retry_count': retry_count,\n        'failure_mode': failure_mode,\n        'last_error': last_error,\n        'last_stage': 'nmap',\n        'lock_owner': None,\n        'lock_until': None,\n    }\n\n    out.append({'json': {\n        'product_type_id': pt_id,\n        'state': next_state,\n        'description': build_description(agg['description'], updated_state),\n        'workflow_status': 'ok' if next_state != 'error' else 'error',\n    }})\n\nreturn out\n"
+        "pythonCode": "import json\nimport re\nimport os\nfrom datetime import datetime, timezone\n\nBLOCK_START = \"PT_STATE_JSON_START\"\nBLOCK_END = \"PT_STATE_JSON_END\"\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\ndef parse_state(description):\n    if not isinstance(description, str):\n        return {}\n    m = re.search(rf\"{BLOCK_START}\\n(.*?)\\n{BLOCK_END}\", description, re.DOTALL)\n    if not m:\n        return {}\n    try:\n        state = json.loads(m.group(1).strip())\n        return state if isinstance(state, dict) else {}\n    except Exception:\n        return {}\n\ndef build_description(base_description, state_payload):\n    text = base_description if isinstance(base_description, str) else ''\n    pattern = re.compile(rf\"\\n?{BLOCK_START}\\n.*?\\n{BLOCK_END}\\n?\", re.DOTALL)\n    clean = re.sub(pattern, \"\\n\", text).rstrip()\n    block = f\"{BLOCK_START}\\n{json.dumps(state_payload, ensure_ascii=False, sort_keys=True)}\\n{BLOCK_END}\"\n    if clean:\n        return clean + \"\\n\\n\" + block\n    return block\n\nitems = _input.all()\nif not items:\n    return []\n\nmax_retries = int(os.getenv('PT_RETRY_NMAP_MAX', '3') or 3)\nnow = datetime.now(timezone.utc).isoformat()\nby_pt = {}\nfor item in items:\n    row = item.json if isinstance(item.json, dict) else {}\n    try:\n        pt_id = int(read_key(row, 'product_type_id'))\n    except Exception:\n        continue\n\n    agg = by_pt.get(pt_id)\n    if agg is None:\n        agg = {\n            'description': read_key(row, 'nmap_state_description', ''),\n            'nmap_total': int(read_key(row, 'nmap_total', 0) or 0),\n            'nmap_done': int(read_key(row, 'nmap_done_initial', 0) or 0),\n            'nmap_failed': int(read_key(row, 'nmap_failed_initial', 0) or 0),\n            'done_inc': 0,\n            'failed_inc': 0,\n            'errors': [],\n        }\n        by_pt[pt_id] = agg\n\n    status = str(read_key(row, 'workflow_status', 'ok') or 'ok')\n    if status == 'ok':\n        agg['done_inc'] += 1\n    else:\n        agg['failed_inc'] += 1\n        err = str(read_key(row, 'error_message', '') or '').strip()\n        if err:\n            agg['errors'].append(err)\n\nout = []\nfor pt_id, agg in by_pt.items():\n    state_obj = parse_state(agg['description'])\n    counters = read_key(state_obj, 'counters', {})\n    if not isinstance(counters, dict):\n        counters = {}\n\n    nmap_total = agg['nmap_total'] if agg['nmap_total'] > 0 else int(counters.get('nmap_total', 0) or 0)\n    nmap_done = int(agg['nmap_done']) + int(agg['done_inc'])\n    nmap_failed = int(agg['nmap_failed']) + int(agg['failed_inc'])\n    processed_total = nmap_done + nmap_failed\n\n    counters['nmap_total'] = nmap_total\n    counters['nmap_done'] = nmap_done\n    counters['nmap_failed'] = nmap_failed\n\n    retry_count = int(read_key(state_obj, 'retry_count', 0) or 0)\n    last_error = read_key(state_obj, 'last_error')\n\n    if agg['failed_inc'] > 0:\n        retry_count += 1\n        diag = '; '.join([e for e in agg['errors'] if e][:2])\n        if not diag:\n            diag = f'nmap stage reported {agg[\"failed_inc\"]} failed job(s)'\n        last_error = f'NMAP error: {diag}'\n\n    all_nmap_jobs_processed = nmap_total == 0 or processed_total >= nmap_total\n    has_nmap_failures = nmap_failed > 0\n    has_pending_nmap_jobs = nmap_total > 0 and processed_total < nmap_total\n    retries_exhausted = retry_count >= max_retries\n    failure_mode = 'none'\n\n    if has_nmap_failures:\n        if retries_exhausted and not has_pending_nmap_jobs:\n            next_state = 'error'\n            failure_mode = 'terminal'\n        else:\n            next_state = 'nmap_running'\n            failure_mode = 'partial_retryable'\n    else:\n        next_state = 'nmap_done' if all_nmap_jobs_processed else 'nmap_running'\n        if next_state == 'nmap_done':\n            last_error = None\n\n    updated_state = {\n        'version': int(read_key(state_obj, 'version', 1) or 1),\n        'state': next_state,\n        'counters': counters,\n        'last_update': now,\n        'retry_count': retry_count,\n        'failure_mode': failure_mode,\n        'last_error': last_error,\n        'last_stage': 'nmap',\n        'lock_owner': None,\n        'lock_until': None,\n    }\n\n    out.append({'json': {\n        'product_type_id': pt_id,\n        'state': next_state,\n        'description': build_description(agg['description'], updated_state),\n        'workflow_status': 'ok' if next_state != 'error' else 'error',\n        'state_patch_status': 'state_patch_pending',\n        'state_patch_context': 'wf_b_summary',\n        'report_node': 'wf_b_summary',\n    }})\n\nreturn out\n"
       },
       "name": "Summarize WF_B Results (Python)",
       "type": "n8n-nodes-base.code",
@@ -514,6 +518,75 @@
         432
       ],
       "id": "m-summarize-b"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.state_patch_context || ''}}",
+              "operation": "equal",
+              "value2": "wf_b_summary"
+            }
+          ]
+        }
+      },
+      "id": "m-if-patch-from-wfb",
+      "name": "Patch From WF_B Summary?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "language": "python",
+        "pythonCode": "items = _input.all()\nout = []\nfor item in items:\n    row = item.json if isinstance(item.json, dict) else {}\n    merged = dict(row)\n    merged['state_patch_status'] = 'state_patch_failed' if merged.get('error') else 'state_patch_ok'\n    out.append({'json': merged})\nreturn out"
+      },
+      "id": "m-finalize-state-patch-report",
+      "name": "Finalize State Patch Report (Python)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        120,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{$json.state_patch_status}}",
+              "operation": "equal",
+              "value2": "state_patch_ok"
+            }
+          ]
+        }
+      },
+      "id": "m-if-state-patch-ok",
+      "name": "State Patch OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        300,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{ 'PT-state PATCH failed for product_type_id=' + String($json.product_type_id || 'unknown') + '. status=' + String($json.statusCode || 'n/a') + '; error=' + String(($json.error && ($json.error.message || $json.error.description || $json.error)) || 'unknown') }}"
+      },
+      "id": "m-stop-patch-error",
+      "name": "Stop on PT State PATCH Error",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        500,
+        300
+      ]
     }
   ],
   "connections": {
@@ -884,9 +957,56 @@
             "node": "Patch PT State Description",
             "type": "main",
             "index": 0
-          },
+          }
+        ]
+      ]
+    },
+    "Patch PT State Description": {
+      "main": [
+        [
+          {
+            "node": "Patch From WF_B Summary?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Patch From WF_B Summary?": {
+      "main": [
+        [
+          {
+            "node": "Finalize State Patch Report (Python)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Finalize State Patch Report (Python)": {
+      "main": [
+        [
+          {
+            "node": "State Patch OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "State Patch OK?": {
+      "main": [
+        [
           {
             "node": "Need WF_C_Targets_For_PT?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop on PT State PATCH Error",
             "type": "main",
             "index": 0
           }
