@@ -543,7 +543,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "items = _input.all()\nout = []\nfor item in items:\n    row = item.json if isinstance(item.json, dict) else {}\n    merged = dict(row)\n    merged['state_patch_status'] = 'state_patch_failed' if merged.get('error') else 'state_patch_ok'\n    out.append({'json': merged})\nreturn out"
+        "pythonCode": "import json\n\nitems = _input.all()\nout = []\nfailed_total = 0\n\nfor item in items:\n    row = item.json if isinstance(item.json, dict) else {}\n    merged = dict(row)\n\n    has_error = bool(merged.get('error'))\n    merged['pt_id'] = merged.get('product_type_id')\n    merged['state_patch_status'] = 'state_patch_failed' if has_error else 'state_patch_ok'\n\n    merged['state_patch_api_response'] = merged.get('body')\n    if has_error and not merged.get('state_patch_api_response'):\n        merged['state_patch_api_response'] = merged.get('error')\n\n    if has_error:\n        failed_total += 1\n\n    out.append({'json': merged})\n\nfor item in out:\n    item['json']['state_patch_failed_total'] = failed_total\n\nreturn out\n"
       },
       "id": "m-finalize-state-patch-report",
       "name": "Finalize State Patch Report (Python)",
@@ -577,7 +577,7 @@
     },
     {
       "parameters": {
-        "message": "={{ 'PT-state PATCH failed for product_type_id=' + String($json.product_type_id || 'unknown') + '. status=' + String($json.statusCode || 'n/a') + '; error=' + String(($json.error && ($json.error.message || $json.error.description || $json.error)) || 'unknown') }}"
+        "message": "={{ 'PT-state PATCH failed. pt_id=' + String($json.pt_id || $json.product_type_id || 'unknown') + '; context=' + String($json.state_patch_context || 'unknown') + '; status=' + String($json.statusCode || 'n/a') + '; api_response=' + JSON.stringify($json.state_patch_api_response || $json.body || $json.error || {}) }}"
       },
       "id": "m-stop-patch-error",
       "name": "Stop on PT State PATCH Error",
