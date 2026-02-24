@@ -174,7 +174,7 @@ PT_STATE_JSON_END
 > Если `ACUNETIX_API_KEY` не задан, fallback идёт на legacy `ACU_API_TOKEN` (временный переходный режим).
 
 - `ACUNETIX_MAX_SCANS_PER_NODE` — глобальный лимит активных сессий на ноду (по умолчанию `5`).
-- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `token`, `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional), `weight` (optional, для policy `weighted`).
+- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `api_key` (рекомендуется) / `token` (legacy alias), `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional), `weight` (optional, для policy `weighted`).
 - `ACUNETIX_NODE_SELECTION_POLICY` — фиксирует правило выбора ноды: `least_loaded` (по умолчанию) или `weighted`.
 - `ACUNETIX_STICKY_ASSIGNMENT` — sticky назначение ноды на PT (`true` по умолчанию).
 
@@ -182,10 +182,10 @@ PT_STATE_JSON_END
 
 ```env
 ACUNETIX_MAX_SCANS_PER_NODE=5
-ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","token":"token1","max_scans_per_node":8},{"name":"acu-2","endpoint":"https://acu-2.local:3443","token":"token2"}]
+ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","api_key":"token1","max_scans_per_node":8},{"name":"acu-2","endpoint":"https://acu-2.local:3443","api_key":"token2"}]
 ```
 
-`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Если API-ключ отсутствует (включая пустые/битые `ACUNETIX_INSTANCES_JSON` без token), workflow завершает stage явной ошибкой конфигурации.
+`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Если API-ключ отсутствует (включая пустые/битые `ACUNETIX_INSTANCES_JSON` без `api_key/token`), workflow завершает stage явной ошибкой конфигурации.
 
 Политика диспетчеризации:
 
@@ -197,7 +197,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 `WF_Dojo_Master` пишет policy snapshot в PT-state (`acu_dispatch_policy`) при переводе PT в `acu_running`, а также пробрасывает policy в `queue_wf_d_pt_acunetixscan`/итог плана.
 
-`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job. В начале stage выполняется явная проверка endpoint/API-key; при пустом токене выполнение останавливается с диагностикой.
+`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_api_key`, legacy alias: `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job. В начале stage выполняется явная проверка endpoint/API-key; при пустом токене выполнение останавливается с диагностикой.
 
 ### Явные payload для `executeWorkflow`
 
@@ -206,7 +206,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 - `pt_id` — обязательный идентификатор Product Type (дублируется с `product_type_id` для совместимости).
 - `stage` — ожидаемая стадия subworkflow (`subdomains`, `nmap`, `targets`, `acu`).
 - `job_metadata` — служебный объект (`source_workflow`, `queue`, `transition`, `lock_owner`).
-- `selected_acu_node` — выбранная Acunetix-нода (для ACU-ветки; до диспетчеризации `null`, после диспетчеризации содержит `name/endpoint/token`).
+- `selected_acu_node` — выбранная Acunetix-нода (для ACU-ветки; до диспетчеризации `null`, после диспетчеризации содержит `name/endpoint/api_key`, а `token` оставлен как legacy alias).
 
 Минимальные схемы:
 
@@ -231,6 +231,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
   "selected_acu_node": {
     "name": "acu-1",
     "endpoint": "https://acu-1.local:3443",
+    "api_key": "***",
     "token": "***"
   }
 }
