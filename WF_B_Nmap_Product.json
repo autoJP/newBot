@@ -19,6 +19,40 @@
             {
               "name": "product_id",
               "value": "={{ $json.product_id }}"
+            },
+            {
+              "name": "product_name",
+              "value": "={ $json.product_name }"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={ $json.product_type_id }"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={ $json.product_type_name }"
+            },
+            {
+              "name": "domain",
+              "value": "={ $json.domain }"
+            },
+            {
+              "name": "nmap_state_description",
+              "value": "={ $json.nmap_state_description }"
+            }
+          ],
+          "number": [
+            {
+              "name": "nmap_total",
+              "value": "={ $json.nmap_total }"
+            },
+            {
+              "name": "nmap_done_initial",
+              "value": "={ $json.nmap_done_initial }"
+            },
+            {
+              "name": "nmap_failed_initial",
+              "value": "={ $json.nmap_failed_initial }"
             }
           ]
         },
@@ -221,7 +255,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "items = _input.all()\nif not items:\n    return []\n\nout = []\nfor item in items:\n    payload = item.json\n\n    try:\n        raw = payload.get('product_id')\n    except Exception:\n        try:\n            raw = payload['product_id']\n        except Exception:\n            raw = None\n\n    try:\n        product_id = int(raw)\n    except Exception:\n        raise Exception(f'product_id is missing or invalid: {raw}')\n\n    if product_id <= 0:\n        raise Exception(f'product_id must be > 0, got: {raw}')\n\n    product_name = None\n    product_type_id = None\n    try:\n        product_name = payload.get('product_name')\n        product_type_id = payload.get('product_type_id')\n    except Exception:\n        try:\n            product_name = payload['product_name']\n        except Exception:\n            pass\n        try:\n            product_type_id = payload['product_type_id']\n        except Exception:\n            pass\n\n    out.append({\n        'json': {\n            'product_id': product_id,\n            'product_name': product_name,\n            'product_type_id': product_type_id,\n        }\n    })\n\nreturn out\n"
+        "pythonCode": "items = _input.all()\nif not items:\n    return []\n\nout = []\nfor item in items:\n    payload = item.json\n\n    try:\n        raw = payload.get('product_id')\n    except Exception:\n        try:\n            raw = payload['product_id']\n        except Exception:\n            raw = None\n\n    try:\n        product_id = int(raw)\n    except Exception:\n        raise Exception(f'product_id is missing or invalid: {raw}')\n\n    if product_id <= 0:\n        raise Exception(f'product_id must be > 0, got: {raw}')\n\n    product_name = None\n    product_type_id = None\n    try:\n        product_name = payload.get('product_name')\n        product_type_id = payload.get('product_type_id')\n    except Exception:\n        try:\n            product_name = payload['product_name']\n        except Exception:\n            pass\n        try:\n            product_type_id = payload['product_type_id']\n        except Exception:\n            pass\n\n    out.append({\n        'json': {\n            'product_id': product_id,\n            'product_name': product_name,\n            'product_type_id': product_type_id,\n            'product_type_name': payload.get('product_type_name'),\n            'domain': payload.get('domain'),\n            'nmap_total': payload.get('nmap_total'),\n            'nmap_done_initial': payload.get('nmap_done_initial'),\n            'nmap_failed_initial': payload.get('nmap_failed_initial'),\n            'nmap_state_description': payload.get('nmap_state_description'),\n        }\n    })\n\nreturn out\n"
       },
       "name": "Validate Product ID",
       "type": "n8n-nodes-base.code",
@@ -231,6 +265,124 @@
         272
       ],
       "id": "b-validate-product-id"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "workflow_status",
+              "value": "ok"
+            },
+            {
+              "name": "product_id",
+              "value": "={{ $('Validate Product ID').item.json.product_id }}"
+            },
+            {
+              "name": "product_name",
+              "value": "={{ $('Get Product from Dojo').item.json.name }}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{ $('Validate Product ID').item.json.product_type_id }}"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={{ $('Validate Product ID').item.json.product_type_name }}"
+            },
+            {
+              "name": "domain",
+              "value": "={{ $('Validate Product ID').item.json.domain }}"
+            },
+            {
+              "name": "nmap_state_description",
+              "value": "={{ $('Validate Product ID').item.json.nmap_state_description }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "nmap_total",
+              "value": "={{ $('Validate Product ID').item.json.nmap_total }}"
+            },
+            {
+              "name": "nmap_done_initial",
+              "value": "={{ $('Validate Product ID').item.json.nmap_done_initial }}"
+            },
+            {
+              "name": "nmap_failed_initial",
+              "value": "={{ $('Validate Product ID').item.json.nmap_failed_initial }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Result (Success)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1712,
+        144
+      ],
+      "id": "b-set-result-success"
+    },
+    {
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "workflow_status",
+              "value": "error"
+            },
+            {
+              "name": "product_id",
+              "value": "={{ $('Validate Product ID').item.json.product_id }}"
+            },
+            {
+              "name": "product_name",
+              "value": "={{ $('Get Product from Dojo').item.json.name }}"
+            },
+            {
+              "name": "product_type_id",
+              "value": "={{ $('Validate Product ID').item.json.product_type_id }}"
+            },
+            {
+              "name": "product_type_name",
+              "value": "={{ $('Validate Product ID').item.json.product_type_name }}"
+            },
+            {
+              "name": "domain",
+              "value": "={{ $('Validate Product ID').item.json.domain }}"
+            },
+            {
+              "name": "nmap_state_description",
+              "value": "={{ $('Validate Product ID').item.json.nmap_state_description }}"
+            }
+          ],
+          "number": [
+            {
+              "name": "nmap_total",
+              "value": "={{ $('Validate Product ID').item.json.nmap_total }}"
+            },
+            {
+              "name": "nmap_done_initial",
+              "value": "={{ $('Validate Product ID').item.json.nmap_done_initial }}"
+            },
+            {
+              "name": "nmap_failed_initial",
+              "value": "={{ $('Validate Product ID').item.json.nmap_failed_initial }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "name": "Set Result (Failure)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        416
+      ],
+      "id": "b-set-result-failure"
     }
   ],
   "pinData": {},
@@ -321,12 +473,24 @@
     },
     "Update Tags (Failure)": {
       "main": [
-        []
+        [
+          {
+            "node": "Set Result (Failure)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Update Tags (Success)": {
       "main": [
-        []
+        [
+          {
+            "node": "Set Result (Success)",
+            "type": "main",
+            "index": 0
+          }
+        ]
       ]
     },
     "Validate Product ID": {
@@ -338,6 +502,16 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Set Result (Success)": {
+      "main": [
+        []
+      ]
+    },
+    "Set Result (Failure)": {
+      "main": [
+        []
       ]
     }
   },
