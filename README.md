@@ -31,7 +31,6 @@
 
 - `ACU_API_TOKEN` — fallback, если `ACUNETIX_API_KEY` не задан.
 - `ACU_BASE_URL` — fallback, если `ACUNETIX_BASE_URL` не задан.
-- `ACUNETIX_TARGET_MAPPING_FILE` — legacy fallback для mapping-файла, если `ACUNETIX_MAPPING_DB` не задан.
 
 Дополнительные переменные, которые используются кодом/health workflow:
 
@@ -49,6 +48,24 @@
 - Для base URL также поддерживается legacy-алиас `ACU_BASE_URL`, но рекомендуется использовать только `ACUNETIX_BASE_URL`.
 
 > Рекомендуется загружать этот `.env` в окружение n8n/контейнера n8n, чтобы все workflow и скрипты видели одинаковые значения.
+
+### Важно: формат `ACUNETIX_INSTANCES_JSON` для shell/systemd
+
+`ACUNETIX_INSTANCES_JSON` содержит JSON со встроенными `"..."`, поэтому строка в стиле:
+
+```env
+ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://...","api_key":"..."}]
+```
+
+может быть корректно прочитана dotenv-парсером, но ломаться при `source .env` в bash или при `EnvironmentFile=` в systemd.
+
+Используйте безопасный вариант с двойными кавычками и экранированными символами внутри:
+
+```env
+ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://...\",\"api_key\":\"...\"}]"
+```
+
+Это безопасно для `source`/systemd. Дополнительно workflow теперь автоматически снимают случайную внешнюю обертку `'...'` или `"..."` перед `json.loads(...)`, чтобы конфиг не падал из-за кавычек.
 
 ## Импорт workflow в n8n
 
@@ -218,7 +235,7 @@ PT_STATE_JSON_END
 
 ```env
 ACUNETIX_MAX_SCANS_PER_NODE=5
-ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","api_key":"token1","max_scans_per_node":8},{"name":"acu-2","endpoint":"https://acu-2.local:3443","api_key":"token2"}]
+ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://acu-1.local:3443\",\"api_key\":\"token1\",\"max_scans_per_node\":8},{\"name\":\"acu-2\",\"endpoint\":\"https://acu-2.local:3443\",\"api_key\":\"token2\"}]"
 ```
 
 `WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Если API-ключ отсутствует (включая пустые/битые `ACUNETIX_INSTANCES_JSON` без `api_key/token`), workflow завершает stage явной ошибкой конфигурации.
@@ -308,6 +325,8 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 - `PT_HEALTH_WINDOW_SIZE` — сколько Product Type анализируется в `WF_E_System_Health` за один запуск (по умолчанию `300`).
 - `HEALTH_MAX_LOG_EVENTS` — лимит массива `log_events` в health-отчете (по умолчанию `500`).
 - `ACUNETIX_MAPPING_DB` — обязательный persistent SQLite-path для PT↔target mapping (по умолчанию `/data/n8n/acunetix_mapping_store.sqlite3`). Допускается только путь внутри `/data/...`; debug-fallback отключен.
+
+Важно: единый mapping backend — `ACUNETIX_MAPPING_DB` (SQLite) как для workflow-нод, так и для `acunetix_sync_pt.py`.
 
 ### Что теперь показывает `WF_E_System_Health`
 
@@ -447,7 +466,6 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 - `/opt/tools/bin/` — исполняемые Python-скрипты (симлинки или копии)
 - `/var/lib/newbot/` — рабочие данные/артефакты
 - `/var/lib/newbot/nmap/` — входные XML nmap
-- `/var/lib/newbot/artifacts/` — промежуточные артефакты
 - `/data/n8n/` — persistent volume для n8n (включая SQLite mapping DB)
 
 Минимальный пример дерева:
@@ -507,9 +525,10 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 - `ACUNETIX_MAPPING_DB=/data/n8n/acunetix_mapping_store.sqlite3`
 - `NMAP_XML_DIR=/var/lib/newbot/nmap`
-- `PT_TARGETS_ARTIFACT_DIR=/var/lib/newbot/artifacts`
 
 Проверьте, что пользователь процесса n8n имеет права записи в эти каталоги.
+
+Workflow используют `NMAP_XML_DIR` для nmap XML и связанных артефактов; директория должна существовать и быть writable для процесса n8n.
 
 ### 5) Вариант A: n8n как systemd-сервис
 
@@ -540,7 +559,7 @@ Workflow используют скрипты из репозитория.
 - n8n читает env-файл;
 - n8n читает workflow/скрипты в `/opt/tools`;
 - n8n пишет в `/data/n8n` (SQLite mapping);
-- n8n пишет в `NMAP_XML_DIR` и `PT_TARGETS_ARTIFACT_DIR`;
+- n8n имеет права записи в `NMAP_XML_DIR`;
 - токены Dojo/Acunetix не доступны world-readable пользователям.
 
 ### 9) Минимальная эксплуатационная политика безопасности

@@ -51,7 +51,7 @@
     },
     {
       "parameters": {
-        "command": "=DOJO_API_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/process_nmap_ips_for_pt.py \\\n  --product-type-id {{$json[\"product_type_id\"].toString()}} \\\n  --xml-dir /tmp \\\n  --api-token \"$DOJO_API_TOKEN\""
+        "command": "=DOJO_API_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/process_nmap_ips_for_pt.py \\\n  --product-type-id {{$json[\"product_type_id\"].toString()}} \\\n  --xml-dir {{$env.NMAP_XML_DIR || '/tmp'}} \\\n  --api-token \"$DOJO_API_TOKEN\""
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
@@ -64,7 +64,7 @@
     },
     {
       "parameters": {
-        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --acu-node-json '{{ JSON.stringify($(\"Validate Acunetix Node\").item.json.selected_acu_node) }}'\n "
+        "command": "=python3 /opt/tools/acunetix_sync_pt.py \\\n  --dojo-base-url {{$env.DOJO_BASE_URL || 'http://localhost:8080/api/v2'}} \\\n  --dojo-api-token {{$env.DOJO_API_TOKEN}} \\\n  --product-type-id {{ $('Set Parameters').item.json.product_type_id }} \\\n  --mapping-db {{$env.ACUNETIX_MAPPING_DB || '/data/n8n/acunetix_mapping_store.sqlite3'}} \\\n  --acu-node-json '{{ JSON.stringify($(\"Validate Acunetix Node\").item.json.selected_acu_node) }}'\n "
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
