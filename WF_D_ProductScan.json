@@ -40,6 +40,14 @@
             {
               "name": "acunetix_target_id",
               "value": "={{ (($json.acunetix_target_id || $json.target_id || \"\").toString()).trim() }}"
+            },
+            {
+              "name": "acunetix_profile_id",
+              "value": "={{ (($json.acunetix_profile_id || $json.scan_profile_id || $env.ACUNETIX_PROFILE_ID || \"\").toString()).trim() }}"
+            },
+            {
+              "name": "acunetix_report_template_id",
+              "value": "={{ (($json.acunetix_report_template_id || $json.report_template_id || $env.ACUNETIX_REPORT_TEMPLATE_ID || \"\").toString()).trim() }}"
             }
           ],
           "object": [
@@ -152,7 +160,7 @@
         "url": "={{ ($json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/scans' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"target_id\": $node['Finalize Scan Payload Contract'].json.acunetix_target_id, \"profile_id\": \"11111111-1111-1111-1111-111111111111\", \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}}",
+        "jsonBody": "={{ {\"target_id\": String($node['Finalize Scan Payload Contract'].json.acunetix_target_id || \"\"), \"profile_id\": String($node['Finalize Scan Payload Contract'].json.acunetix_profile_id || \"\"), \"schedule\": {\"disable\": false, \"start_date\": null, \"time_sensitive\": false}} }}",
         "headerParametersUi": {
           "parameter": [
             {
@@ -307,7 +315,7 @@
         "url": "={{ ($node['Finalize Scan Payload Contract'].json.acunetix_endpoint || '').replace(/\\/+$/,'') + '/api/v1/reports' }}",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\"template_id\": \"11111111-1111-1111-1111-111111111111\", \"source\": {\"list_type\": \"scans\", \"id_list\": [$node['Start Scan'].json.scan_id]}}",
+        "jsonBody": "={{ {\"template_id\": String($node['Finalize Scan Payload Contract'].json.acunetix_report_template_id || \"\"), \"source\": {\"list_type\": \"scans\", \"id_list\": [String($node['Start Scan'].json.scan_id || \"\")]}} }}",
         "headerParametersUi": {
           "parameter": [
             {
@@ -587,6 +595,14 @@
             {
               "name": "target_url",
               "value": "={{ 'https://' + ($node['Get Product'].json.name || '') }}"
+            },
+            {
+              "name": "acunetix_profile_id",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_profile_id || \"\").toString().trim() }}"
+            },
+            {
+              "name": "acunetix_report_template_id",
+              "value": "={{ ($node['Validate Acunetix Node Input'].json.acunetix_report_template_id || \"\").toString().trim() }}"
             }
           ],
           "object": [
@@ -608,6 +624,70 @@
       "position": [
         -420,
         220
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ (() => { const value=(($node['Finalize Scan Payload Contract'].json.acunetix_profile_id || \"\").toString().trim()); const isUuid=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value); const looksPlaceholder=/placeholder|changeme|example|dummy|your[_-]?/i.test(value) || /^(0{8}-0{4}-0{4}-0{4}-0{12}|1{8}-1{4}-1{4}-1{4}-1{12})$/i.test(value); return isUuid && !looksPlaceholder; })() }}"
+            }
+          ]
+        }
+      },
+      "id": "p-if-valid-profile-id",
+      "name": "Validate Scan Profile ID",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "message": "=WF_D_ProductScan invalid Acunetix scan profile id. Provide acunetix_profile_id/scan_profile_id input or ACUNETIX_PROFILE_ID env var. Got: {{$node['Finalize Scan Payload Contract'].json.acunetix_profile_id || '<empty>'}}"
+      },
+      "id": "p-error-profile-id",
+      "name": "Invalid Scan Profile ID",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        -120,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ (() => { const value=(($node['Finalize Scan Payload Contract'].json.acunetix_report_template_id || \"\").toString().trim()); const isUuid=/^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(value); const looksPlaceholder=/placeholder|changeme|example|dummy|your[_-]?/i.test(value) || /^(0{8}-0{4}-0{4}-0{4}-0{12}|1{8}-1{4}-1{4}-1{4}-1{12})$/i.test(value); return isUuid && !looksPlaceholder; })() }}"
+            }
+          ]
+        }
+      },
+      "id": "p-if-valid-report-template-id",
+      "name": "Validate Report Template ID",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        580,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "message": "=WF_D_ProductScan invalid Acunetix report template id. Provide acunetix_report_template_id/report_template_id input or ACUNETIX_REPORT_TEMPLATE_ID env var. Got: {{$node['Finalize Scan Payload Contract'].json.acunetix_report_template_id || '<empty>'}}"
+      },
+      "id": "p-error-report-template-id",
+      "name": "Invalid Report Template ID",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        580,
+        320
       ]
     }
   ],
@@ -661,7 +741,7 @@
         [],
         [
           {
-            "node": "Start Scan",
+            "node": "Validate Scan Profile ID",
             "type": "main",
             "index": 0
           }
@@ -774,7 +854,7 @@
         ],
         [
           {
-            "node": "Generate Report",
+            "node": "Validate Report Template ID",
             "type": "main",
             "index": 0
           }
@@ -862,6 +942,42 @@
         [
           {
             "node": "Skip new launch?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Scan Profile ID": {
+      "main": [
+        [
+          {
+            "node": "Start Scan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Scan Profile ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Report Template ID": {
+      "main": [
+        [
+          {
+            "node": "Generate Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Invalid Report Template ID",
             "type": "main",
             "index": 0
           }
