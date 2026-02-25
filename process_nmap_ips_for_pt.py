@@ -29,6 +29,7 @@ from typing import List, Tuple, Set, Dict
 import requests
 import xml.etree.ElementTree as ET
 from ipaddress import ip_address
+from urllib.parse import urlsplit
 
 API_TIMEOUT = 30
 TARGET_ARTIFACT_BLOCK_START = "PT_TARGET_LIST_START"
@@ -159,6 +160,32 @@ def strip_www(host: str) -> str:
     return host
 
 
+
+
+def extract_host_from_product_name(value: str) -> str:
+    """Return normalized host part from product/PT name, removing scheme/path/userinfo/port."""
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+
+    candidate = raw
+    lowered = raw.lower()
+    if lowered.startswith("http://") or lowered.startswith("https://"):
+        parsed = urlsplit(raw)
+        candidate = (parsed.hostname or "").strip()
+    else:
+        candidate = raw.split("/", 1)[0].strip()
+        if "@" in candidate:
+            candidate = candidate.rsplit("@", 1)[1].strip()
+        if candidate.startswith("[") and "]" in candidate:
+            candidate = candidate[1:candidate.find("]")].strip()
+        elif candidate.count(":") == 1:
+            host_part, port_part = candidate.split(":", 1)
+            if port_part.isdigit():
+                candidate = host_part
+
+    return candidate.strip().strip(".").lower()
+
 def parse_nmap_xml_for_ips(filename: str, exclude_ports: Set[int]) -> List[Tuple[str, int, str]]:
     """
     Parse nmap xml and return list of (ip, port, proto) for open web-like services.
@@ -287,7 +314,7 @@ def process_single_product_type(pt_id: int) -> dict:
         existing_product_names.add(pname)
 
         if p.get("internet_accessible"):
-            host_part = pname.split(":", 1)[0]
+            host_part = extract_host_from_product_name(pname)
             if host_part and not looks_like_ip(host_part):
                 canonical = strip_www(host_part)
                 domain_hosts.add(canonical)
@@ -335,9 +362,9 @@ def process_single_product_type(pt_id: int) -> dict:
     lines: List[str] = []
 
     # main PT name: if not IP, add only https:// form, canonicalized for host, but label = pt_name
-    if pt_name and not looks_like_ip(pt_name.split(":", 1)[0]):
-        host_part = pt_name.split(":", 1)[0]
-        canonical_pt = strip_www(host_part)
+    pt_host = extract_host_from_product_name(pt_name)
+    if pt_host and not looks_like_ip(pt_host):
+        canonical_pt = strip_www(pt_host)
         lines.append(f"https://{canonical_pt}, {pt_name}")
 
     # products with internet_accessible and non-IP names (canonical hosts, no www)
