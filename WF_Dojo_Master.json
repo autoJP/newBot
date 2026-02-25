@@ -468,7 +468,7 @@
             },
             {
               "name": "state_patch_status",
-              "value": "={{$json.error ? \"fail\" : \"success\"}}"
+              "value": "={{ (!$json.error && Number($json.statusCode || 0) >= 200 && Number($json.statusCode || 0) < 300) ? \"success\" : \"fail\" }}"
             },
             {
               "name": "status_code",
@@ -477,6 +477,30 @@
             {
               "name": "state_patch_error",
               "value": "={{$json.error ? JSON.stringify($json.error) : \"\"}}"
+            },
+            {
+              "name": "event",
+              "value": "={{$json.error ? 'state_patch_failed' : 'state_patch_applied'}}"
+            },
+            {
+              "name": "log_contract_version",
+              "value": "v1"
+            },
+            {
+              "name": "log_level",
+              "value": "={{$json.error ? 'error' : 'info'}}"
+            },
+            {
+              "name": "health_degradation",
+              "value": "={{$json.error ? 'pt_state_persistence_degraded' : ''}}"
+            },
+            {
+              "name": "state_patch_failure_count",
+              "value": "={{$json.error ? Number($json.state_patch_failure_count || 0) + 1 : Number($json.state_patch_failure_count || 0)}}"
+            },
+            {
+              "name": "state_patch_retry_count",
+              "value": "={{$json.error ? Number($json.state_patch_retry_count || 0) + Number($json.maxTries || 0) : Number($json.state_patch_retry_count || 0)}}"
             }
           ]
         },
@@ -514,7 +538,81 @@
     },
     {
       "parameters": {
-        "message": "={{ 'PT-state PATCH failed. pt_id=' + String($json.pt_id || 'unknown') + '; state_before=' + String($json.state_before || 'unknown') + '; state_after=' + String($json.state_after || 'unknown') + '; status=' + String($json.status_code || 'n/a') + '; error=' + String($json.state_patch_error || 'n/a') }}"
+        "keepOnlySet": true,
+        "values": {
+          "json": [
+            {
+              "name": "pt_id",
+              "value": "={{$json.pt_id}}"
+            },
+            {
+              "name": "state_before",
+              "value": "={{$json.state_before}}"
+            },
+            {
+              "name": "state_after",
+              "value": "={{$json.state_after}}"
+            },
+            {
+              "name": "state_patch_status",
+              "value": "fail"
+            },
+            {
+              "name": "workflow_status",
+              "value": "error"
+            },
+            {
+              "name": "event",
+              "value": "state_patch_failed"
+            },
+            {
+              "name": "log_contract_version",
+              "value": "v1"
+            },
+            {
+              "name": "log_level",
+              "value": "error"
+            },
+            {
+              "name": "health_degradation",
+              "value": "pt_state_persistence_degraded"
+            },
+            {
+              "name": "state_patch_failure_count",
+              "value": "={{Number($json.state_patch_failure_count || 0) + 1}}"
+            },
+            {
+              "name": "state_patch_retry_count",
+              "value": "={{Number($json.state_patch_retry_count || 0) + Number($json.maxTries || 0)}}"
+            },
+            {
+              "name": "status_code",
+              "value": "={{$json.status_code}}"
+            },
+            {
+              "name": "state_patch_error",
+              "value": "={{$json.state_patch_error}}"
+            },
+            {
+              "name": "log_message",
+              "value": "={{\"state_patch_failed: PT state block was not persisted\"}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "m-build-state-patch-failure-event",
+      "name": "Build State Patch Failure Event (Set)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        500,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "message": "={{ 'PT-state PATCH failed. event=' + String($json.event || 'state_patch_failed') + '; pt_id=' + String($json.pt_id || 'unknown') + '; state_before=' + String($json.state_before || 'unknown') + '; state_after=' + String($json.state_after || 'unknown') + '; failures=' + String($json.state_patch_failure_count || 0) + '; retries=' + String($json.state_patch_retry_count || 0) + '; status=' + String($json.status_code || 'n/a') + '; error=' + String($json.state_patch_error || 'n/a') }}"
       },
       "id": "m-stop-patch-error",
       "name": "Stop on PT State PATCH Error",
@@ -1056,7 +1154,7 @@
         ],
         [
           {
-            "node": "Stop on PT State PATCH Error",
+            "node": "Build State Patch Failure Event (Set)",
             "type": "main",
             "index": 0
           }
@@ -1228,6 +1326,17 @@
         [
           {
             "node": "Prepare Trigger Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build State Patch Failure Event (Set)": {
+      "main": [
+        [
+          {
+            "node": "Stop on PT State PATCH Error",
             "type": "main",
             "index": 0
           }
