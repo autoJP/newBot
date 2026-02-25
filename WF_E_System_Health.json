@@ -15,7 +15,7 @@
     {
       "parameters": {
         "authentication": "headerAuth",
-        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/system_settings/' }}",
+        "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/product_types/?limit=1' }}",
         "options": {
           "ignoreHttpStatusErrors": true,
           "fullResponse": true
@@ -34,7 +34,9 @@
           "id": "mGl4PbJkKfeJbTg8",
           "name": "Header Auth account"
         }
-      }
+      },
+      "notesInFlow": true,
+      "notes": "Health-check Dojo via read-only endpoint /product_types/?limit=1; success criterion is HTTP 2xx only."
     },
     {
       "parameters": {
