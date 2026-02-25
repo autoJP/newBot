@@ -18,6 +18,7 @@
 4. Файл окружения **`~/.n8n-env/.env`** с обязательными переменными (синхронизировано с `.env.example`):
    - `DOJO_BASE_URL`
    - `DOJO_API_TOKEN`
+
    - `ACUNETIX_BASE_URL`
    - `ACUNETIX_API_KEY`
    - `ACUNETIX_INSTANCES_JSON`
@@ -30,6 +31,13 @@
 
 - `ACU_API_TOKEN` — fallback, если `ACUNETIX_API_KEY` не задан.
 - `ACU_BASE_URL` — fallback, если `ACUNETIX_BASE_URL` не задан.
+- `ACUNETIX_TARGET_MAPPING_FILE` — legacy fallback для mapping-файла, если `ACUNETIX_MAPPING_DB` не задан.
+
+Дополнительные переменные, которые используются кодом/health workflow:
+
+- `HEALTH_ALERT_WEBHOOK` — необязательный webhook для алертов health-check.
+- `ACUNETIX_MAPPING_DEBUG_CACHE` — debug-режим источника mapping.
+- `ACUNETIX_MAPPING_ALLOW_DEBUG_FALLBACK` — разрешает fallback mapping в debug-сценарии.
 
 ### Стандарт переменных Acunetix
 
@@ -329,10 +337,206 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 ### Процедура восстановления после ошибок
 
 1. Запустить `WF_E_System_Health` и проверить блоки `critical`, `node_errors`, `pt_errors`.
-2. Если есть `dojo_unavailable`/`n8n_unavailable`/ошибки Acunetix-ноды — сначала восстановить инфраструктуру/credentials.
+2. Если есть `dojo_unavailable` или ошибки Acunetix-ноды — сначала восстановить инфраструктуру/credentials.
 3. Для PT в `error`:
    - проверить `last_stage`, `last_error`, `retry_count` в `product_type.description`;
    - устранить причину (скрипт subdomains/nmap, доступ к Dojo/Acunetix, лимиты);
    - при необходимости вручную сбросить state в `new` или на предыдущий валидный этап.
 4. Повторно запустить `WF_Dojo_Master`.
 5. Контролировать, что PT переходят по цепочке `subdomains_running -> subdomains_done -> nmap_running -> nmap_done -> targets_ready -> acu_running -> done` без повторного возврата в `error`.
+
+
+## Академический регламент валидации и запуска (стенд: n8n + DefectDojo + 2 Acunetix)
+
+Ниже приведён формализованный порядок первичного ввода системы в эксплуатацию и контрольной валидации оркестрации. Регламент ориентирован на воспроизводимость результатов и минимизацию операционных рисков.
+
+### 1. Подготовительный этап (pre-flight)
+
+1. Подготовить файл окружения n8n на основе `.env.example`; убедиться, что заданы обязательные параметры Dojo/Acunetix и лимиты планировщика.
+2. Проверить `ACUNETIX_INSTANCES_JSON`: должны быть описаны обе Acunetix-ноды с корректными `endpoint` и `api_key` (или `token` как legacy-алиас).
+3. Проверить `ACUNETIX_MAPPING_DB`: путь должен быть persistent и находиться в `/data/...`; процесс n8n должен иметь права записи.
+4. Валидировать credentials в n8n:
+   - DefectDojo (token-based header auth),
+   - Acunetix (`X-Auth`).
+5. Импортировать все workflow-файлы из корня репозитория и убедиться, что ссылки `executeWorkflow` указывают на корректные subworkflow IDs.
+
+### 2. Базовая валидация интеграций
+
+1. Выполнить ручной запуск `WF_E_System_Health`.
+2. Зафиксировать результат в отчёте:
+   - отсутствие критических ошибок конфигурации,
+   - доступность Dojo и Acunetix-пула,
+   - корректность mapping backend,
+   - валидность PT state-блоков (структурная целостность).
+
+### 3. Контролируемый пилотный запуск оркестрации
+
+1. На этапе пилота установить умеренное значение `PT_WINDOW_SIZE` (например, 5–10), чтобы ограничить число одновременно обрабатываемых PT.
+2. Запустить `WF_Dojo_Master` вручную (без cron).
+3. Проверить, что сформированы рабочие очереди A/B/C/D и выполнены state-обновления без массовых переходов в `error`.
+
+### 4. Проверка прохождения стадий A→B→C→D
+
+Для выбранного окна PT необходимо подтвердить факт последовательного прохождения стадий:
+
+1. `WF_A_Subdomains_PT`: запуск и завершение stage A (`subdomains_running/subdomains_done`).
+2. `WF_B_Nmap_Product`: запуск stage B для PT, достигших `subdomains_done`.
+3. `WF_C_Targets_For_PT`: подготовка/синхронизация targets на stage C.
+4. `WF_D_PT_AcunetixScan` → `WF_D_ProductScan`: диспетчеризация и выполнение сканов stage D.
+
+Критерий приемки: отсутствие необъяснимых пропусков стадии и отсутствие «разрыва» между state и фактическими запусками subworkflow.
+
+### 5. Валидация multi-node диспетчеризации Acunetix
+
+1. Выполнить 2–3 последовательных запуска `WF_Dojo_Master`.
+2. Проверить поведение sticky-маршрутизации при `ACUNETIX_STICKY_ASSIGNMENT=true`: PT преимущественно назначается на ранее выбранную ноду.
+3. Проверить fallback-механику: при недоступности/перегрузке закреплённой ноды задача переходит на альтернативную ноду согласно policy.
+4. Убедиться, что PT↔node соответствия сохраняются в mapping store и консистентны между циклами.
+
+### 6. Переход в штатный режим
+
+1. Установить целевое значение `PT_WINDOW_SIZE` по фактической производительности стенда.
+2. Включить периодический запуск `WF_Dojo_Master` (cron).
+3. Оставить `WF_E_System_Health` как регулярный мониторинговый контур с отдельным интервалом выполнения.
+
+### 7. Пост-пусковой контроль качества (первые 24 часа)
+
+Рекомендуется мониторить следующие индикаторы:
+
+- динамика `retry_count` и доля PT, переходящих в `error`;
+- признаки starvation (длительная очередь PT с большими `id` при малом `PT_WINDOW_SIZE`);
+- равномерность использования двух Acunetix-нод;
+- стабильность mapping backend и отсутствие деградации целостности PT-state.
+
+Данный регламент рекомендуется использовать как стандартную операционную процедуру (SOP) для первичного запуска и последующих регрессионных проверок после изменений в workflow или инфраструктуре.
+
+
+## Полный гайд по размещению файлов и правам (Ubuntu 22.04)
+
+Ниже — практический «с нуля» сценарий для администратора, который не знаком с проектом.
+
+### Важная совместимость путей: `/opt/tools`
+
+Текущие workflow (JSON в репозитории) вызывают Python-скрипты по абсолютным путям вида:
+
+- `/opt/tools/enum_subs_auto.py`
+- `/opt/tools/process_nmap_ips_for_pt.py`
+- `/opt/tools/acunetix_sync_pt.py`
+- `/opt/tools/acunetix_set_group_scan_speed.py`
+- `/opt/tools/dojo_set_internet.py`
+
+Поэтому для Ubuntu 22.04 обязательно размещайте скрипты именно в `/opt/tools`.
+
+Без этого workflow не найдут скрипты и будут падать с ошибкой `No such file or directory`.
+
+### 1) Рекомендуемая структура каталогов
+
+Создайте единый корневой каталог проекта, например:
+
+- `/opt/tools/` — код проекта (workflow JSON + Python-скрипты)
+- `/opt/tools/bin/` — исполняемые Python-скрипты (симлинки или копии)
+- `/var/lib/newbot/` — рабочие данные/артефакты
+- `/var/lib/newbot/nmap/` — входные XML nmap
+- `/var/lib/newbot/artifacts/` — промежуточные артефакты
+- `/data/n8n/` — persistent volume для n8n (включая SQLite mapping DB)
+
+Минимальный пример дерева:
+
+```text
+/opt/tools/
+  README.md
+  .env.example
+  WF_A_Subdomains_PT.json
+  WF_B_Nmap_Product.json
+  WF_C_Targets_For_PT.json
+  WF_D_PT_AcunetixScan.json
+  WF_D_ProductScan.json
+  WF_Dojo_Master.json
+  WF_E_System_Health.json
+  enum_subs_auto.py
+  process_nmap_ips_for_pt.py
+  acunetix_sync_pt.py
+  acunetix_set_group_scan_speed.py
+  dojo_set_internet.py
+  bin/
+    enum_subs_auto.py -> ../enum_subs_auto.py
+    process_nmap_ips_for_pt.py -> ../process_nmap_ips_for_pt.py
+    ...
+```
+
+### 2) Какой пользователь должен владеть файлами
+
+Рекомендуется запускать n8n от отдельного системного пользователя (например, `n8n`).
+
+- Владелец кода и рабочих директорий: `root:n8n`.
+- Права на чтение кода для группы `n8n`.
+- Права на запись только там, где это действительно нужно (`/data/n8n`, `/var/lib/newbot/*`).
+
+Рекомендуемая модель прав:
+
+- Каталоги с кодом (`/opt/tools`): `750`
+- Python-скрипты: `750` (или `640`, если запуск только через `python script.py`)
+- Директории данных (`/var/lib/newbot`, `/data/n8n`): `770`
+- Файл окружения с токенами: `640` (владелец `root`, группа `n8n`)
+
+### 3) Куда положить `.env`
+
+Канонический путь для этого проекта:
+
+- `~/.n8n-env/.env` (как указано в README выше)
+
+Для production на Ubuntu обычно удобнее фиксированный путь:
+
+- `/etc/newbot/newbot.env`
+
+Важно: выберите **один** путь и используйте его последовательно в способе запуска n8n (systemd или docker compose).
+
+### 4) Какие переменные путей выставить
+
+В `.env` укажите пути под вашу файловую схему:
+
+- `ACUNETIX_MAPPING_DB=/data/n8n/acunetix_mapping_store.sqlite3`
+- `NMAP_XML_DIR=/var/lib/newbot/nmap`
+- `PT_TARGETS_ARTIFACT_DIR=/var/lib/newbot/artifacts`
+
+Проверьте, что пользователь процесса n8n имеет права записи в эти каталоги.
+
+### 5) Вариант A: n8n как systemd-сервис
+
+1. Убедиться, что сервис n8n стартует от пользователя `n8n`.
+2. В unit-файле подключить env-файл (`EnvironmentFile=...`).
+3. Перезапустить сервис и убедиться, что переменные применились.
+4. Импортировать workflow JSON из `/opt/tools` в UI n8n.
+
+### 6) Вариант B: n8n в Docker/Compose
+
+1. Смонтировать каталог проекта read-only, например `/opt/tools:/opt/tools:ro`.
+2. Смонтировать persistent-данные read-write, например `/data/n8n:/data/n8n` и при необходимости `/var/lib/newbot:/var/lib/newbot`.
+3. Подключить env-файл через `env_file`.
+4. Проверить, что внутри контейнера доступны пути из `.env`.
+
+### 7) Где должны лежать Python-скрипты для workflow
+
+Workflow используют скрипты из репозитория.
+
+Скрипты должны храниться по путям `/opt/tools/...`, так как эти абсолютные пути используются в workflow.
+
+Ключевое требование: пути, зашитые в workflow (`/opt/tools/...`), должны существовать на сервере.
+
+### 8) Чек-лист прав перед первым запуском
+
+Перед запуском `WF_Dojo_Master` проверьте:
+
+- n8n читает env-файл;
+- n8n читает workflow/скрипты в `/opt/tools`;
+- n8n пишет в `/data/n8n` (SQLite mapping);
+- n8n пишет в `NMAP_XML_DIR` и `PT_TARGETS_ARTIFACT_DIR`;
+- токены Dojo/Acunetix не доступны world-readable пользователям.
+
+### 9) Минимальная эксплуатационная политика безопасности
+
+- Не хранить токены в workflow JSON; только в env.
+- Не давать права `777` на проектные каталоги.
+- Не запускать n8n от `root`.
+- Делать резервные копии `/data/n8n/acunetix_mapping_store.sqlite3`.
+- Любое изменение прав/путей фиксировать в операционном журнале.
