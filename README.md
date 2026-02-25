@@ -15,13 +15,21 @@
 1. **DefectDojo** (API доступен из n8n).
 2. **Acunetix** (API доступен из n8n).
 3. **n8n** (инстанс, куда будут импортированы workflow).
-4. Файл окружения **`~/.n8n-env/.env`** с переменными:
-   - `DOJO_*`
-   - `ACUNETIX_*`
-   - `NMAP_XML_DIR`
-   - `N8N_*`
-   - `SUBDOMAINS_CONCURRENCY`, `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES`, `NMAP_CONCURRENCY`, `PT_WINDOW_SIZE`
-   - `PT_LOCK_TTL_MINUTES`, `PT_RETRY_SUBDOMAINS_MAX`, `PT_RETRY_NMAP_MAX`, `PT_RETRY_TARGETS_MAX`, `PT_RETRY_ACU_MAX`
+4. Файл окружения **`~/.n8n-env/.env`** с обязательными переменными (синхронизировано с `.env.example`):
+   - `DOJO_BASE_URL`
+   - `DOJO_API_TOKEN`
+   - `ACUNETIX_BASE_URL`
+   - `ACUNETIX_API_KEY`
+   - `ACUNETIX_INSTANCES_JSON`
+   - `SUBDOMAINS_CONCURRENCY`
+   - `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES`
+   - `NMAP_CONCURRENCY`
+   - `PT_WINDOW_SIZE`
+
+Дополнительно для обратной совместимости поддерживаются legacy-алиасы Acunetix (необязательные):
+
+- `ACU_API_TOKEN` — fallback, если `ACUNETIX_API_KEY` не задан.
+- `ACU_BASE_URL` — fallback, если `ACUNETIX_BASE_URL` не задан.
 
 ### Стандарт переменных Acunetix
 
