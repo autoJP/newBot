@@ -22,37 +22,37 @@
             },
             {
               "name": "product_name",
-              "value": "={ $json.product_name }"
+              "value": "={{ $json.product_name }}"
             },
             {
               "name": "product_type_id",
-              "value": "={ $json.product_type_id }"
+              "value": "={{ $json.product_type_id }}"
             },
             {
               "name": "product_type_name",
-              "value": "={ $json.product_type_name }"
+              "value": "={{ $json.product_type_name }}"
             },
             {
               "name": "domain",
-              "value": "={ $json.domain }"
+              "value": "={{ $json.domain }}"
             },
             {
               "name": "nmap_state_description",
-              "value": "={ $json.nmap_state_description }"
+              "value": "={{ $json.nmap_state_description }}"
             }
           ],
           "number": [
             {
               "name": "nmap_total",
-              "value": "={ $json.nmap_total }"
+              "value": "={{ $json.nmap_total }}"
             },
             {
               "name": "nmap_done_initial",
-              "value": "={ $json.nmap_done_initial }"
+              "value": "={{ $json.nmap_done_initial }}"
             },
             {
               "name": "nmap_failed_initial",
-              "value": "={ $json.nmap_failed_initial }"
+              "value": "={{ $json.nmap_failed_initial }}"
             }
           ]
         },
