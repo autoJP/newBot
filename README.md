@@ -18,6 +18,7 @@
 4. Файл окружения **`~/.n8n-env/.env`** с обязательными переменными (синхронизировано с `.env.example`):
    - `DOJO_BASE_URL`
    - `DOJO_API_TOKEN`
+
    - `ACUNETIX_BASE_URL`
    - `ACUNETIX_API_KEY`
    - `ACUNETIX_INSTANCES_JSON`
@@ -414,12 +415,26 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 Ниже — практический «с нуля» сценарий для администратора, который не знаком с проектом.
 
+### Важная совместимость путей: `/opt/tools`
+
+Текущие workflow (JSON в репозитории) вызывают Python-скрипты по абсолютным путям вида:
+
+- `/opt/tools/enum_subs_auto.py`
+- `/opt/tools/process_nmap_ips_for_pt.py`
+- `/opt/tools/acunetix_sync_pt.py`
+- `/opt/tools/acunetix_set_group_scan_speed.py`
+- `/opt/tools/dojo_set_internet.py`
+
+Поэтому для Ubuntu 22.04 обязательно размещайте скрипты именно в `/opt/tools`.
+
+Без этого workflow не найдут скрипты и будут падать с ошибкой `No such file or directory`.
+
 ### 1) Рекомендуемая структура каталогов
 
 Создайте единый корневой каталог проекта, например:
 
-- `/opt/newbot/` — код проекта (workflow JSON + Python-скрипты)
-- `/opt/newbot/bin/` — исполняемые Python-скрипты (симлинки или копии)
+- `/opt/tools/` — код проекта (workflow JSON + Python-скрипты)
+- `/opt/tools/bin/` — исполняемые Python-скрипты (симлинки или копии)
 - `/var/lib/newbot/` — рабочие данные/артефакты
 - `/var/lib/newbot/nmap/` — входные XML nmap
 - `/var/lib/newbot/artifacts/` — промежуточные артефакты
@@ -428,7 +443,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 Минимальный пример дерева:
 
 ```text
-/opt/newbot/
+/opt/tools/
   README.md
   .env.example
   WF_A_Subdomains_PT.json
@@ -459,7 +474,7 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 
 Рекомендуемая модель прав:
 
-- Каталоги с кодом (`/opt/newbot`): `750`
+- Каталоги с кодом (`/opt/tools`): `750`
 - Python-скрипты: `750` (или `640`, если запуск только через `python script.py`)
 - Директории данных (`/var/lib/newbot`, `/data/n8n`): `770`
 - Файл окружения с токенами: `640` (владелец `root`, группа `n8n`)
@@ -491,30 +506,29 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 1. Убедиться, что сервис n8n стартует от пользователя `n8n`.
 2. В unit-файле подключить env-файл (`EnvironmentFile=...`).
 3. Перезапустить сервис и убедиться, что переменные применились.
-4. Импортировать workflow JSON из `/opt/newbot` в UI n8n.
+4. Импортировать workflow JSON из `/opt/tools` в UI n8n.
 
 ### 6) Вариант B: n8n в Docker/Compose
 
-1. Смонтировать каталог проекта read-only, например `/opt/newbot:/opt/newbot:ro`.
+1. Смонтировать каталог проекта read-only, например `/opt/tools:/opt/tools:ro`.
 2. Смонтировать persistent-данные read-write, например `/data/n8n:/data/n8n` и при необходимости `/var/lib/newbot:/var/lib/newbot`.
 3. Подключить env-файл через `env_file`.
 4. Проверить, что внутри контейнера доступны пути из `.env`.
 
 ### 7) Где должны лежать Python-скрипты для workflow
 
-Workflow используют скрипты из репозитория; на практике есть два безопасных подхода:
+Workflow используют скрипты из репозитория.
 
-1. **Рекомендуемый:** хранить оригиналы в `/opt/newbot`, вызывать их по абсолютному пути.
-2. **Операционный:** держать симлинки в `/opt/newbot/bin` и вызывать единообразно из этой папки.
+Скрипты должны храниться по путям `/opt/tools/...`, так как эти абсолютные пути используются в workflow.
 
-Ключевое требование: путь в workflow и фактический путь на сервере должны совпадать.
+Ключевое требование: пути, зашитые в workflow (`/opt/tools/...`), должны существовать на сервере.
 
 ### 8) Чек-лист прав перед первым запуском
 
 Перед запуском `WF_Dojo_Master` проверьте:
 
 - n8n читает env-файл;
-- n8n читает workflow/скрипты в `/opt/newbot`;
+- n8n читает workflow/скрипты в `/opt/tools`;
 - n8n пишет в `/data/n8n` (SQLite mapping);
 - n8n пишет в `NMAP_XML_DIR` и `PT_TARGETS_ARTIFACT_DIR`;
 - токены Dojo/Acunetix не доступны world-readable пользователям.

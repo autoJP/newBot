@@ -3,8 +3,8 @@
 import os, sys, argparse, xml.etree.ElementTree as ET, requests, json
 
 DOJO_BASE = os.getenv("DOJO_BASE_URL", "http://localhost:8080/api/v2").rstrip("/")
-DOJO_TOKEN = os.getenv("DOJO_TOKEN", "")
-H = {"Authorization": f"Token {DOJO_TOKEN}", "Accept": "application/json", "Content-Type": "application/json"}
+DOJO_API_TOKEN = os.getenv("DOJO_API_TOKEN", "").strip()
+H = {"Authorization": f"Token {DOJO_API_TOKEN}", "Accept": "application/json", "Content-Type": "application/json"}
 
 def host_is_up(xml_path: str) -> bool:
     tree = ET.parse(xml_path)
@@ -40,8 +40,8 @@ def main():
     ap.add_argument("--xml", required=True)
     args = ap.parse_args()
 
-    if not DOJO_TOKEN:
-        print("ERROR: DOJO_TOKEN not set", file=sys.stderr)
+    if not DOJO_API_TOKEN:
+        print("ERROR: DOJO_API_TOKEN not set", file=sys.stderr)
         sys.exit(2)
 
     # Определяем живость
