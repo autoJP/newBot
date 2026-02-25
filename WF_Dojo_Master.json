@@ -16,7 +16,9 @@
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/product_types/?limit=200&offset=0' }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "id": "m-get-product-types",
       "name": "Get Product Types",
@@ -37,7 +39,9 @@
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/?limit=200&offset=0' }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "id": "m-get-products",
       "name": "Get Products",
@@ -309,7 +313,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import os\nimport json\nimport urllib.request\n\nitems = _input.all()\n\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\n\ndef fetch_next_pages(next_url):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not next_url or not token:\n        return []\n\n    out = []\n    visited = set()\n    current = str(next_url)\n\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=30) as resp:\n            payload = json.loads(resp.read().decode('utf-8') or '{}')\n        out.extend(to_list(read_key(payload, 'results', [])))\n        current = read_key(payload, 'next')\n\n    return out\n\n\naggregated = []\nnext_url = None\nfor item in items:\n    payload = item.json if item else None\n    if payload is None:\n        continue\n    aggregated.extend(to_list(read_key(payload, 'results', [])))\n    if next_url is None:\n        next_url = read_key(payload, 'next')\n\naggregated.extend(fetch_next_pages(next_url))\n\nreturn [{'json': {'product_types': aggregated}}]"
+        "pythonCode": "import os\nimport json\nimport urllib.request\nimport ssl\n\n# Intentional policy: internal services may use self-signed certs; TLS verification is disabled on purpose.\nSSL_UNVERIFIED_CONTEXT = ssl._create_unverified_context()\n\nitems = _input.all()\n\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\n\ndef fetch_next_pages(next_url):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not next_url or not token:\n        return []\n\n    out = []\n    visited = set()\n    current = str(next_url)\n\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=30, context=SSL_UNVERIFIED_CONTEXT) as resp:\n            payload = json.loads(resp.read().decode('utf-8') or '{}')\n        out.extend(to_list(read_key(payload, 'results', [])))\n        current = read_key(payload, 'next')\n\n    return out\n\n\naggregated = []\nnext_url = None\nfor item in items:\n    payload = item.json if item else None\n    if payload is None:\n        continue\n    aggregated.extend(to_list(read_key(payload, 'results', [])))\n    if next_url is None:\n        next_url = read_key(payload, 'next')\n\naggregated.extend(fetch_next_pages(next_url))\n\nreturn [{'json': {'product_types': aggregated}}]"
       },
       "id": "m-prepare-pt",
       "name": "Prepare Product Types (Python)",
@@ -323,7 +327,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import os\nimport json\nimport urllib.request\n\nitems = _input.all()\n\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\n\ndef fetch_next_pages(next_url):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not next_url or not token:\n        return []\n\n    out = []\n    visited = set()\n    current = str(next_url)\n\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=30) as resp:\n            payload = json.loads(resp.read().decode('utf-8') or '{}')\n        out.extend(to_list(read_key(payload, 'results', [])))\n        current = read_key(payload, 'next')\n\n    return out\n\n\naggregated = []\nnext_url = None\nfor item in items:\n    payload = item.json if item else None\n    if payload is None:\n        continue\n    aggregated.extend(to_list(read_key(payload, 'results', [])))\n    if next_url is None:\n        next_url = read_key(payload, 'next')\n\naggregated.extend(fetch_next_pages(next_url))\n\nreturn [{'json': {'products': aggregated, 'plan_input_source': 'normal'}}]"
+        "pythonCode": "import os\nimport json\nimport urllib.request\nimport ssl\n\n# Intentional policy: internal services may use self-signed certs; TLS verification is disabled on purpose.\nSSL_UNVERIFIED_CONTEXT = ssl._create_unverified_context()\n\nitems = _input.all()\n\n\ndef read_key(container, key, default=None):\n    try:\n        value = container.get(key)\n        return default if value is None else value\n    except Exception:\n        try:\n            value = container[key]\n            return default if value is None else value\n        except Exception:\n            return default\n\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\n\ndef fetch_next_pages(next_url):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not next_url or not token:\n        return []\n\n    out = []\n    visited = set()\n    current = str(next_url)\n\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=30, context=SSL_UNVERIFIED_CONTEXT) as resp:\n            payload = json.loads(resp.read().decode('utf-8') or '{}')\n        out.extend(to_list(read_key(payload, 'results', [])))\n        current = read_key(payload, 'next')\n\n    return out\n\n\naggregated = []\nnext_url = None\nfor item in items:\n    payload = item.json if item else None\n    if payload is None:\n        continue\n    aggregated.extend(to_list(read_key(payload, 'results', [])))\n    if next_url is None:\n        next_url = read_key(payload, 'next')\n\naggregated.extend(fetch_next_pages(next_url))\n\nreturn [{'json': {'products': aggregated, 'plan_input_source': 'normal'}}]"
       },
       "id": "m-prepare-products",
       "name": "Prepare Products (Python)",
@@ -387,7 +391,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { description: $json.description } }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "id": "m-patch-pt-state",
       "name": "Patch PT State Description",

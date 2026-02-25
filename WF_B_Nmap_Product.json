@@ -71,7 +71,9 @@
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/' + $json.product_id + '/' }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "name": "Get Product from Dojo",
       "type": "n8n-nodes-base.httpRequest",
@@ -191,7 +193,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
@@ -213,7 +217,9 @@
         "authentication": "headerAuth",
         "requestMethod": "PATCH",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/' + $('Get Product from Dojo').item.json.id+ '/' }}",
-        "options": {},
+        "options": {
+          "allowUnauthorizedCerts": true
+        },
         "bodyParametersUi": {
           "parameter": [
             {

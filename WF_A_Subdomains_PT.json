@@ -41,7 +41,9 @@
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/product_types/' + $json.product_type_id + '/' }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "name": "Get Product Type from Dojo",
       "type": "n8n-nodes-base.httpRequest",
@@ -123,7 +125,9 @@
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/?prod_type=' + $json.product_type_id + '&limit=200&offset=0' }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "name": "Get Existing Products",
       "type": "n8n-nodes-base.httpRequest",
@@ -143,7 +147,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import os\nimport json\nimport urllib.request\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\n\ndef fetch_next_pages(next_url):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not next_url or not token:\n        return []\n\n    out = []\n    visited = set()\n    current = str(next_url)\n\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=30) as resp:\n            payload = json.loads(resp.read().decode('utf-8') or '{}')\n        out.extend(to_list(read_key(payload, 'results', [])))\n        current = read_key(payload, 'next')\n\n    return out\n\n\nitems = _input.all()\nparsed_items = _(\"Parse Results\").all()\nextract_items = _(\"Extract Domain\").all()\n\nif not items:\n    return []\n\nparsed_json = [it.json for it in parsed_items]\nextract_json = [it.json for it in extract_items]\n\nexisting_names = set()\nnext_url = None\nfor idx, item in enumerate(items):\n    payload = item.json if item and isinstance(item.json, dict) else {}\n    for product in to_list(read_key(payload, 'results', [])):\n        name = read_key(product, 'name')\n        if isinstance(name, str) and name:\n            existing_names.add(name)\n    if next_url is None:\n        next_url = read_key(payload, 'next')\n\nfor product in fetch_next_pages(next_url):\n    name = read_key(product, 'name')\n    if isinstance(name, str) and name:\n        existing_names.add(name)\n\noutput = []\nfor idx, parsed in enumerate(parsed_json or [{}]):\n    parsed = parsed if isinstance(parsed, dict) else {}\n    extract = extract_json[idx] if idx < len(extract_json) else (extract_json[0] if extract_json else {})\n\n    pt_id = read_key(parsed, 'product_type_id', read_key(extract, 'product_type_id'))\n    domain = read_key(parsed, 'domain', read_key(extract, 'domain'))\n\n    subs = to_list(read_key(parsed, 'subdomains', []))\n    if len(subs) == 0:\n        raw_result = read_key(parsed, 'raw_result', {})\n        raw_subs = to_list(read_key(raw_result, 'subs', []))\n        rebuilt = []\n        for s in raw_subs:\n            host = read_key(s, 'host') if s is not None else None\n            if isinstance(host, str) and host:\n                rebuilt.append(host)\n            elif isinstance(s, str) and s:\n                rebuilt.append(s)\n        subs = rebuilt\n\n    hosts_to_create = []\n    for host in subs:\n        if isinstance(host, str) and host and host not in existing_names:\n            hosts_to_create.append(host)\n\n    if len(hosts_to_create) == 0 and isinstance(domain, str) and domain and domain not in existing_names:\n        hosts_to_create.append(domain)\n\n    seen = set()\n    for host in hosts_to_create:\n        if host in seen:\n            continue\n        seen.add(host)\n        output.append({'json': {'product_type_id': pt_id, 'domain': domain, 'host': host}})\n\nreturn output"
+        "pythonCode": "import os\nimport json\nimport urllib.request\nimport ssl\n\n# Intentional policy: internal services may use self-signed certs; TLS verification is disabled on purpose.\nSSL_UNVERIFIED_CONTEXT = ssl._create_unverified_context()\n\ndef read_key(container, key, default=None):\n    try:\n        val = container.get(key)\n        return default if val is None else val\n    except Exception:\n        try:\n            val = container[key]\n            return default if val is None else val\n        except Exception:\n            return default\n\n\ndef to_list(value):\n    if value is None:\n        return []\n    if isinstance(value, list):\n        return value\n    try:\n        return [v for v in value]\n    except Exception:\n        return []\n\n\ndef fetch_next_pages(next_url):\n    token = (os.environ.get('DOJO_API_TOKEN') or '').strip()\n    if not next_url or not token:\n        return []\n\n    out = []\n    visited = set()\n    current = str(next_url)\n\n    while current and current not in visited:\n        visited.add(current)\n        req = urllib.request.Request(current)\n        req.add_header('Authorization', f'Token {token}')\n        req.add_header('Accept', 'application/json')\n        with urllib.request.urlopen(req, timeout=30, context=SSL_UNVERIFIED_CONTEXT) as resp:\n            payload = json.loads(resp.read().decode('utf-8') or '{}')\n        out.extend(to_list(read_key(payload, 'results', [])))\n        current = read_key(payload, 'next')\n\n    return out\n\n\nitems = _input.all()\nparsed_items = _(\"Parse Results\").all()\nextract_items = _(\"Extract Domain\").all()\n\nif not items:\n    return []\n\nparsed_json = [it.json for it in parsed_items]\nextract_json = [it.json for it in extract_items]\n\nexisting_names = set()\nnext_url = None\nfor idx, item in enumerate(items):\n    payload = item.json if item and isinstance(item.json, dict) else {}\n    for product in to_list(read_key(payload, 'results', [])):\n        name = read_key(product, 'name')\n        if isinstance(name, str) and name:\n            existing_names.add(name)\n    if next_url is None:\n        next_url = read_key(payload, 'next')\n\nfor product in fetch_next_pages(next_url):\n    name = read_key(product, 'name')\n    if isinstance(name, str) and name:\n        existing_names.add(name)\n\noutput = []\nfor idx, parsed in enumerate(parsed_json or [{}]):\n    parsed = parsed if isinstance(parsed, dict) else {}\n    extract = extract_json[idx] if idx < len(extract_json) else (extract_json[0] if extract_json else {})\n\n    pt_id = read_key(parsed, 'product_type_id', read_key(extract, 'product_type_id'))\n    domain = read_key(parsed, 'domain', read_key(extract, 'domain'))\n\n    subs = to_list(read_key(parsed, 'subdomains', []))\n    if len(subs) == 0:\n        raw_result = read_key(parsed, 'raw_result', {})\n        raw_subs = to_list(read_key(raw_result, 'subs', []))\n        rebuilt = []\n        for s in raw_subs:\n            host = read_key(s, 'host') if s is not None else None\n            if isinstance(host, str) and host:\n                rebuilt.append(host)\n            elif isinstance(s, str) and s:\n                rebuilt.append(s)\n        subs = rebuilt\n\n    hosts_to_create = []\n    for host in subs:\n        if isinstance(host, str) and host and host not in existing_names:\n            hosts_to_create.append(host)\n\n    if len(hosts_to_create) == 0 and isinstance(domain, str) and domain and domain not in existing_names:\n        hosts_to_create.append(domain)\n\n    seen = set()\n    for host in hosts_to_create:\n        if host in seen:\n            continue\n        seen.add(host)\n        output.append({'json': {'product_type_id': pt_id, 'domain': domain, 'host': host}})\n\nreturn output"
       },
       "name": "Prepare Create List",
       "type": "n8n-nodes-base.code",
@@ -160,7 +164,8 @@
         "requestMethod": "POST",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/' }}",
         "options": {
-          "bodyContentType": "json"
+          "bodyContentType": "json",
+          "allowUnauthorizedCerts": true
         },
         "bodyParametersUi": {
           "parameter": [
@@ -248,7 +253,9 @@
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={{ { description: $json.description } }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "name": "Patch PT State in Dojo",
       "type": "n8n-nodes-base.httpRequest",
