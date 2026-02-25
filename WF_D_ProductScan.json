@@ -27,11 +27,7 @@
             },
             {
               "name": "acunetix_api_key",
-              "value": "={{ (() => { const endpoint=((($json.selected_acu_node?.endpoint || $json.acunetix_endpoint || '').toString()).trim().replace(/\\/+$/, '')); const name=(($json.selected_acu_node?.name || $json.acunetix_node_name || 'acu-selected').toString()).trim(); const raw=($env.ACUNETIX_INSTANCES_JSON || '').trim(); const q1=String.fromCharCode(39); const q2=String.fromCharCode(34); const sanitized=(raw.length>=2 && ((raw[0]===q1 && raw[raw.length-1]===q1) || (raw[0]===q2 && raw[raw.length-1]===q2))) ? raw.slice(1,-1).trim() : raw; if (sanitized) { try { const arr=JSON.parse(sanitized); if (Array.isArray(arr)) { const hit=arr.find((it)=>{ if(!it || typeof it!=='object') return false; const ep=((it.endpoint || '').toString().trim().replace(/\\/+$/, '')); const nm=((it.name || '').toString().trim()); return (endpoint && ep===endpoint) || (name && nm && nm===name); }); const token=((hit?.api_key || hit?.token || '').toString()).trim(); if (token) return token; } } catch(e) {} } return (($env.ACUNETIX_API_KEY || $env.ACU_API_TOKEN || '').toString()).trim(); })() }}"
-            },
-            {
-              "name": "acunetix_token",
-              "value": "={{ (() => { const endpoint=((($json.selected_acu_node?.endpoint || $json.acunetix_endpoint || '').toString()).trim().replace(/\\/+$/, '')); const name=(($json.selected_acu_node?.name || $json.acunetix_node_name || 'acu-selected').toString()).trim(); const raw=($env.ACUNETIX_INSTANCES_JSON || '').trim(); const q1=String.fromCharCode(39); const q2=String.fromCharCode(34); const sanitized=(raw.length>=2 && ((raw[0]===q1 && raw[raw.length-1]===q1) || (raw[0]===q2 && raw[raw.length-1]===q2))) ? raw.slice(1,-1).trim() : raw; if (sanitized) { try { const arr=JSON.parse(sanitized); if (Array.isArray(arr)) { const hit=arr.find((it)=>{ if(!it || typeof it!=='object') return false; const ep=((it.endpoint || '').toString().trim().replace(/\\/+$/, '')); const nm=((it.name || '').toString().trim()); return (endpoint && ep===endpoint) || (name && nm && nm===name); }); const token=((hit?.api_key || hit?.token || '').toString()).trim(); if (token) return token; } } catch(e) {} } return (($env.ACUNETIX_API_KEY || $env.ACU_API_TOKEN || '').toString()).trim(); })() }}"
+              "value": "={{ (() => { const endpoint=((($json.selected_acu_node?.endpoint || $json.acunetix_endpoint || '').toString()).trim().replace(/\\/+$/, '')); const name=(($json.selected_acu_node?.name || $json.acunetix_node_name || 'acu-selected').toString()).trim(); const raw=($env.ACUNETIX_INSTANCES_JSON || '').trim(); const q1=String.fromCharCode(39); const q2=String.fromCharCode(34); const sanitized=(raw.length>=2 && ((raw[0]===q1 && raw[raw.length-1]===q1) || (raw[0]===q2 && raw[raw.length-1]===q2))) ? raw.slice(1,-1).trim() : raw; if (sanitized) { try { const arr=JSON.parse(sanitized); if (Array.isArray(arr)) { const hit=arr.find((it)=>{ if(!it || typeof it!=='object') return false; const ep=((it.endpoint || '').toString().trim().replace(/\\/+$/, '')); const nm=((it.name || '').toString().trim()); return (endpoint && ep===endpoint) || (name && nm && nm===name); }); const token=((hit?.api_key || '').toString()).trim(); if (token) return token; } } catch(e) {} } return (($env.ACUNETIX_API_KEY || '').toString()).trim(); })() }}"
             },
             {
               "name": "target_id",
@@ -501,7 +497,7 @@
     },
     {
       "parameters": {
-        "message": "=WF_D_ProductScan requires selected_acu_node.endpoint and runtime token resolution via ACUNETIX_INSTANCES_JSON or ACUNETIX_API_KEY/ACU_API_TOKEN."
+        "message": "=WF_D_ProductScan requires selected_acu_node.endpoint and runtime token resolution via ACUNETIX_INSTANCES_JSON or ACUNETIX_API_KEY."
       },
       "id": "p-error-required-node-fields",
       "name": "Missing Acunetix Node Fields",
