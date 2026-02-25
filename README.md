@@ -408,3 +408,121 @@ ACUNETIX_INSTANCES_JSON=[{"name":"acu-1","endpoint":"https://acu-1.local:3443","
 - стабильность mapping backend и отсутствие деградации целостности PT-state.
 
 Данный регламент рекомендуется использовать как стандартную операционную процедуру (SOP) для первичного запуска и последующих регрессионных проверок после изменений в workflow или инфраструктуре.
+
+
+## Полный гайд по размещению файлов и правам (Ubuntu 22.04)
+
+Ниже — практический «с нуля» сценарий для администратора, который не знаком с проектом.
+
+### 1) Рекомендуемая структура каталогов
+
+Создайте единый корневой каталог проекта, например:
+
+- `/opt/newbot/` — код проекта (workflow JSON + Python-скрипты)
+- `/opt/newbot/bin/` — исполняемые Python-скрипты (симлинки или копии)
+- `/var/lib/newbot/` — рабочие данные/артефакты
+- `/var/lib/newbot/nmap/` — входные XML nmap
+- `/var/lib/newbot/artifacts/` — промежуточные артефакты
+- `/data/n8n/` — persistent volume для n8n (включая SQLite mapping DB)
+
+Минимальный пример дерева:
+
+```text
+/opt/newbot/
+  README.md
+  .env.example
+  WF_A_Subdomains_PT.json
+  WF_B_Nmap_Product.json
+  WF_C_Targets_For_PT.json
+  WF_D_PT_AcunetixScan.json
+  WF_D_ProductScan.json
+  WF_Dojo_Master.json
+  WF_E_System_Health.json
+  enum_subs_auto.py
+  process_nmap_ips_for_pt.py
+  acunetix_sync_pt.py
+  acunetix_set_group_scan_speed.py
+  dojo_set_internet.py
+  bin/
+    enum_subs_auto.py -> ../enum_subs_auto.py
+    process_nmap_ips_for_pt.py -> ../process_nmap_ips_for_pt.py
+    ...
+```
+
+### 2) Какой пользователь должен владеть файлами
+
+Рекомендуется запускать n8n от отдельного системного пользователя (например, `n8n`).
+
+- Владелец кода и рабочих директорий: `root:n8n`.
+- Права на чтение кода для группы `n8n`.
+- Права на запись только там, где это действительно нужно (`/data/n8n`, `/var/lib/newbot/*`).
+
+Рекомендуемая модель прав:
+
+- Каталоги с кодом (`/opt/newbot`): `750`
+- Python-скрипты: `750` (или `640`, если запуск только через `python script.py`)
+- Директории данных (`/var/lib/newbot`, `/data/n8n`): `770`
+- Файл окружения с токенами: `640` (владелец `root`, группа `n8n`)
+
+### 3) Куда положить `.env`
+
+Канонический путь для этого проекта:
+
+- `~/.n8n-env/.env` (как указано в README выше)
+
+Для production на Ubuntu обычно удобнее фиксированный путь:
+
+- `/etc/newbot/newbot.env`
+
+Важно: выберите **один** путь и используйте его последовательно в способе запуска n8n (systemd или docker compose).
+
+### 4) Какие переменные путей выставить
+
+В `.env` укажите пути под вашу файловую схему:
+
+- `ACUNETIX_MAPPING_DB=/data/n8n/acunetix_mapping_store.sqlite3`
+- `NMAP_XML_DIR=/var/lib/newbot/nmap`
+- `PT_TARGETS_ARTIFACT_DIR=/var/lib/newbot/artifacts`
+
+Проверьте, что пользователь процесса n8n имеет права записи в эти каталоги.
+
+### 5) Вариант A: n8n как systemd-сервис
+
+1. Убедиться, что сервис n8n стартует от пользователя `n8n`.
+2. В unit-файле подключить env-файл (`EnvironmentFile=...`).
+3. Перезапустить сервис и убедиться, что переменные применились.
+4. Импортировать workflow JSON из `/opt/newbot` в UI n8n.
+
+### 6) Вариант B: n8n в Docker/Compose
+
+1. Смонтировать каталог проекта read-only, например `/opt/newbot:/opt/newbot:ro`.
+2. Смонтировать persistent-данные read-write, например `/data/n8n:/data/n8n` и при необходимости `/var/lib/newbot:/var/lib/newbot`.
+3. Подключить env-файл через `env_file`.
+4. Проверить, что внутри контейнера доступны пути из `.env`.
+
+### 7) Где должны лежать Python-скрипты для workflow
+
+Workflow используют скрипты из репозитория; на практике есть два безопасных подхода:
+
+1. **Рекомендуемый:** хранить оригиналы в `/opt/newbot`, вызывать их по абсолютному пути.
+2. **Операционный:** держать симлинки в `/opt/newbot/bin` и вызывать единообразно из этой папки.
+
+Ключевое требование: путь в workflow и фактический путь на сервере должны совпадать.
+
+### 8) Чек-лист прав перед первым запуском
+
+Перед запуском `WF_Dojo_Master` проверьте:
+
+- n8n читает env-файл;
+- n8n читает workflow/скрипты в `/opt/newbot`;
+- n8n пишет в `/data/n8n` (SQLite mapping);
+- n8n пишет в `NMAP_XML_DIR` и `PT_TARGETS_ARTIFACT_DIR`;
+- токены Dojo/Acunetix не доступны world-readable пользователям.
+
+### 9) Минимальная эксплуатационная политика безопасности
+
+- Не хранить токены в workflow JSON; только в env.
+- Не давать права `777` на проектные каталоги.
+- Не запускать n8n от `root`.
+- Делать резервные копии `/data/n8n/acunetix_mapping_store.sqlite3`.
+- Любое изменение прав/путей фиксировать в операционном журнале.
