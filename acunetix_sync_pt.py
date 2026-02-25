@@ -6,9 +6,10 @@ import json
 import os
 import sys
 import traceback
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlsplit
 from typing import Any, Dict, List, Optional
 import re
+from ipaddress import ip_address
 
 import requests
 import urllib3
@@ -72,6 +73,14 @@ def dojo_get_products_for_pt(
     return products
 
 
+def looks_like_ip(value: str) -> bool:
+    try:
+        ip_address(str(value or '').strip())
+        return True
+    except Exception:
+        return False
+
+
 def normalize_bool(val: Any) -> bool:
     if isinstance(val, bool):
         return val
@@ -82,12 +91,57 @@ def normalize_bool(val: Any) -> bool:
     return False
 
 
+
+
+def normalize_product_name(raw_name: Any) -> str:
+    """Normalize Product.name to host/ip[:port] without protocol/path."""
+    name = str(raw_name or "").strip()
+    if not name:
+        return ""
+
+    lowered = name.lower()
+    if lowered.startswith("http://") or lowered.startswith("https://"):
+        parsed = urlsplit(name)
+        host = (parsed.hostname or "").strip().lower()
+        if not host:
+            return ""
+        if parsed.port:
+            return f"{host}:{parsed.port}"
+        return host
+
+    base = name.split("/", 1)[0].strip()
+    if "@" in base:
+        base = base.rsplit("@", 1)[1].strip()
+    return base.lower()
+
+
+def product_name_to_target_url(name: str) -> str:
+    """Build Acunetix target URL from normalized Product.name (no protocol)."""
+    value = (name or "").strip().lower()
+    if not value:
+        return ""
+
+    host_for_ip = value
+    if value.startswith("[") and "]" in value:
+        host_for_ip = value[1:value.find("]")].strip()
+    elif value.count(":") == 1:
+        host_part, port_part = value.split(":", 1)
+        if port_part.isdigit():
+            host_for_ip = host_part
+
+    if looks_like_ip(host_for_ip) and ":" in value and " " not in value:
+        return f"http://{value}"
+
+    bare = value[4:] if value.startswith("www.") else value
+    return f"https://{bare}"
+
 def build_targets_from_products(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Берём только internet_accessible=true, строим URL для Acunetix и сохраняем связку product_id -> url.
-    • если уже http/https – оставляем
-    • если IP:port – делаем http://IP:port
-    • если домен – https://домен (без дубликатов www.)
+    • ожидается единый контракт Product.name: host/ip[:port] без протокола
+    • для совместимости старые http/https значения нормализуются к host/ip[:port]
+    • IP:port -> http://IP:port
+    • домен -> https://домен (без дубликатов www.)
     """
     seen = set()
     targets: List[Dict[str, Any]] = []
@@ -102,27 +156,18 @@ def build_targets_from_products(products: List[Dict[str, Any]]) -> List[Dict[str
         except Exception:
             continue
 
-        name = (prod.get("name") or "").strip()
-        if not name:
+        normalized_name = normalize_product_name(prod.get("name"))
+        if not normalized_name:
             continue
 
-        lower = name.lower()
-        if lower.startswith("http://") or lower.startswith("https://"):
-            url = name
-        else:
-            # IP:port?
-            if any(ch.isdigit() for ch in lower) and ":" in lower and " " not in lower:
-                url = f"http://{name}"
-            else:
-                bare = lower
-                if bare.startswith("www."):
-                    bare = bare[4:]
-                url = f"https://{bare}"
+        url = product_name_to_target_url(normalized_name)
+        if not url:
+            continue
 
         if url in seen:
             continue
         seen.add(url)
-        targets.append({"product_id": product_id, "url": url, "product_name": name})
+        targets.append({"product_id": product_id, "url": url, "product_name": normalized_name})
 
     return targets
 
