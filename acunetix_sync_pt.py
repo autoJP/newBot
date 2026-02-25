@@ -6,6 +6,8 @@ import json
 import os
 import sys
 import traceback
+import sqlite3
+from datetime import datetime, timezone
 from urllib.parse import urljoin, urlsplit
 from typing import Any, Dict, List, Optional
 import re
@@ -331,45 +333,54 @@ def save_product_target_mapping(
     mapping: Dict[str, str],
     pt_id: int,
     acu_base_url: str,
-    output_path: str,
+    selected_node_name: str,
+    db_path: str,
 ) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {
-        "updated_at": None,
-        "version": 1,
-        "items": {},
+    if not db_path:
+        raise RuntimeError("ACUNETIX_MAPPING_DB is required")
+
+    db_path = db_path.strip()
+    if not db_path.startswith('/data/'):
+        raise RuntimeError(f"ACUNETIX_MAPPING_DB must point to /data/... (got: {db_path})")
+
+    os.makedirs(os.path.dirname(db_path) or '.', exist_ok=True)
+    saved = 0
+    now = datetime.now(timezone.utc).isoformat()
+    selected_node = {
+        'name': str(selected_node_name or '').strip() or None,
+        'endpoint': str(acu_base_url or '').strip().rstrip('/') or None,
     }
-    if os.path.exists(output_path):
-        try:
-            with open(output_path, "r", encoding="utf-8") as f:
-                old = json.load(f)
-            if isinstance(old, dict):
-                payload["updated_at"] = old.get("updated_at")
-                old_items = old.get("items")
-                if isinstance(old_items, dict):
-                    payload["items"] = old_items
-        except Exception:
-            pass
+    selected_node_json = json.dumps(selected_node, ensure_ascii=False)
 
-    items: Dict[str, Any] = payload.get("items", {})
-    for product_id, target_id in mapping.items():
-        items[str(product_id)] = {
-            "target_id": str(target_id),
-            "product_type_id": int(pt_id),
-            "acu_base_url": acu_base_url.rstrip("/"),
-        }
-
-    from datetime import datetime, timezone
-    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
-    payload["items"] = items
-
-    os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, ensure_ascii=False)
+    conn = sqlite3.connect(db_path, timeout=30)
+    try:
+        with conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS acunetix_mapping (
+                    pt_id TEXT NOT NULL,
+                    product_id TEXT NOT NULL,
+                    selected_acu_node TEXT,
+                    target_id TEXT,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (pt_id, product_id)
+                )
+            """)
+            for product_id, target_id in mapping.items():
+                conn.execute(
+                    "INSERT INTO acunetix_mapping(pt_id,product_id,selected_acu_node,target_id,updated_at) VALUES(?,?,?,?,?) "
+                    "ON CONFLICT(pt_id,product_id) DO UPDATE SET selected_acu_node=excluded.selected_acu_node,target_id=excluded.target_id,updated_at=excluded.updated_at",
+                    (str(pt_id), str(product_id), selected_node_json, str(target_id), now),
+                )
+                saved += 1
+            total_items = int(conn.execute("SELECT COUNT(1) FROM acunetix_mapping").fetchone()[0])
+    finally:
+        conn.close()
 
     return {
-        "path": output_path,
-        "saved": len(mapping),
-        "total_items": len(items),
+        "backend": "sqlite",
+        "path": db_path,
+        "saved": saved,
+        "total_items": total_items,
     }
 
 
@@ -423,7 +434,7 @@ def main() -> None:
     ap.add_argument("--acu-node-name", default="")
     ap.add_argument("--acu-node-json", default="")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--mapping-output", default="")
+    ap.add_argument("--mapping-db", default="")
     args = ap.parse_args()
 
     acu_base_url = (args.acu_base_url or "").strip()
@@ -456,11 +467,7 @@ def main() -> None:
     if not acu_api_token:
         raise RuntimeError("Acunetix token is required: pass --acu-token/--acu-api-token or --acu-node-json")
 
-    mapping_output = (
-        (args.mapping_output or "").strip()
-        or (os.environ.get("ACUNETIX_TARGET_MAPPING_FILE") or "").strip()
-        or "/tmp/acunetix_dojo_target_mapping.json"
-    )
+    mapping_db = ((args.mapping_db or "").strip() or (os.environ.get("ACUNETIX_MAPPING_DB") or "").strip() or "/data/n8n/acunetix_mapping_store.sqlite3")
 
     debug: Dict[str, Any] = {
         "pt_id": args.pt_id,
@@ -534,7 +541,7 @@ def main() -> None:
             }
             mapping = {str(x.get("product_id")): "dry-run-target-id" for x in prepared_targets if x.get("product_id") is not None}
             debug["dojo_to_target_mapping"] = mapping
-            mapping_meta = save_product_target_mapping(mapping, args.pt_id, acu_base_url, mapping_output)
+            mapping_meta = save_product_target_mapping(mapping, args.pt_id, acu_base_url, acu_node_name, mapping_db)
             debug["mapping_output"] = mapping_meta
             print(json.dumps({
                 "ok": True,
@@ -567,7 +574,7 @@ def main() -> None:
         if missing_ids:
             debug["mapping_missing_product_ids"] = missing_ids
 
-        mapping_meta = save_product_target_mapping(mapping, args.pt_id, acu_base_url, mapping_output)
+        mapping_meta = save_product_target_mapping(mapping, args.pt_id, acu_base_url, acu_node_name, mapping_db)
         debug["mapping_output"] = mapping_meta
 
         print(json.dumps({

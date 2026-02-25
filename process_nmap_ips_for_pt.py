@@ -5,11 +5,11 @@ process_nmap_ips_for_pt.py
 
 Process Nmap XML for a *single* DefectDojo Product Type:
  - list all products in that product_type
- - collect web IP:port targets from /tmp/nmap_<product_id>.xml (or --xml-dir)
+ - collect web IP:port targets from NMAP_XML_DIR/nmap_<product_id>.xml (or --xml-dir)
  - skip ports in EXCLUDE_PORTS (default 80,443)
  - create new Product entries only for IP:port targets that do not already exist in that product_type
  - set internet_accessible = true for created products
- - build a dedicated targets artifact file with strict markers/parser:
+ - build a dedicated targets artifact file in NMAP_XML_DIR with strict markers/parser:
      - main domain (canonical, without www), one line
      - each internet_accessible non-IP product (canonical host without www)
      - each IP:port target as <proto>://IP:port, <product_type.name>
@@ -77,11 +77,6 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not write to the API; only simulate actions",
     )
-    p.add_argument(
-        "--targets-artifact-dir",
-        default=os.environ.get("PT_TARGETS_ARTIFACT_DIR", "/tmp"),
-        help="Directory for PT targets artifacts (default /tmp)",
-    )
     return p
 
 
@@ -94,7 +89,7 @@ XML_DIR = args.xml_dir
 EXCLUDE_PORTS: Set[int] = {int(p.strip()) for p in args.exclude_ports.split(",") if p.strip().isdigit()}
 DRY_RUN = args.dry_run
 PT_ID = args.product_type_id
-TARGETS_ARTIFACT_DIR = args.targets_artifact_dir
+TARGETS_ARTIFACT_DIR = XML_DIR
 
 if not API_TOKEN:
     print("ERROR: DOJO_API_TOKEN not set and --api-token not provided", file=sys.stderr)

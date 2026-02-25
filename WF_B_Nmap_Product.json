@@ -92,7 +92,7 @@
     },
     {
       "parameters": {
-        "command": "=nmap -sV -T4 --top-ports 50 -oX /tmp/nmap_{{ $('Get Product from Dojo').item.json.id }}.xml {{ $('Get Product from Dojo').item.json.name }}"
+        "command": "=NMAP_XML_DIR=\"{{$env.NMAP_XML_DIR || '/tmp'}}\" && mkdir -p \"$NMAP_XML_DIR\" && nmap -sV -T4 --top-ports 50 -oX \"$NMAP_XML_DIR\"/nmap_{{ $('Get Product from Dojo').item.json.id }}.xml {{ $('Get Product from Dojo').item.json.name }}"
       },
       "name": "Run nmap",
       "type": "n8n-nodes-base.executeCommand",
@@ -126,7 +126,7 @@
     },
     {
       "parameters": {
-        "fileSelector": "=/tmp/nmap_{{ $('Get Product from Dojo').item.json.id }}.xml",
+        "fileSelector": "={{ ($env.NMAP_XML_DIR || '/tmp') + '/nmap_' + $('Get Product from Dojo').item.json.id + '.xml' }}",
         "options": {
           "dataPropertyName": "file"
         }
@@ -247,7 +247,7 @@
     {
       "parameters": {
         "executeOnce": false,
-        "command": "=DOJO_BASE_URL=\"{{$env.DOJO_BASE_URL}}\" \\\nDOJO_API_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/dojo_set_internet.py \\\n  --product-id {{ $('Get Product from Dojo').item.json.id }} \\\n  --xml /tmp/nmap_{{ $('Get Product from Dojo').item.json.id }}.xml\n"
+        "command": "=NMAP_XML_DIR=\"{{$env.NMAP_XML_DIR || '/tmp'}}\" && DOJO_BASE_URL=\"{{$env.DOJO_BASE_URL}}\" \\\nDOJO_API_TOKEN=\"{{$env.DOJO_API_TOKEN}}\" \\\npython3 /opt/tools/dojo_set_internet.py \\\n  --product-id {{ $('Get Product from Dojo').item.json.id }} \\\n  --xml \"$NMAP_XML_DIR\"/nmap_{{ $('Get Product from Dojo').item.json.id }}.xml\n"
       },
       "type": "n8n-nodes-base.executeCommand",
       "typeVersion": 1,
