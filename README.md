@@ -30,6 +30,13 @@
 
 - `ACU_API_TOKEN` — fallback, если `ACUNETIX_API_KEY` не задан.
 - `ACU_BASE_URL` — fallback, если `ACUNETIX_BASE_URL` не задан.
+- `ACUNETIX_TARGET_MAPPING_FILE` — legacy fallback для mapping-файла, если `ACUNETIX_MAPPING_DB` не задан.
+
+Дополнительные переменные, которые используются кодом/health workflow:
+
+- `HEALTH_ALERT_WEBHOOK` — необязательный webhook для алертов health-check.
+- `ACUNETIX_MAPPING_DEBUG_CACHE` — debug-режим источника mapping.
+- `ACUNETIX_MAPPING_ALLOW_DEBUG_FALLBACK` — разрешает fallback mapping в debug-сценарии.
 
 ### Стандарт переменных Acunetix
 
