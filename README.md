@@ -26,12 +26,6 @@
    - `SUBDOMAINS_RUNNING_TIMEOUT_MINUTES`
    - `NMAP_CONCURRENCY`
    - `PT_WINDOW_SIZE`
-
-Дополнительно для обратной совместимости поддерживаются legacy-алиасы Acunetix (необязательные):
-
-- `ACU_API_TOKEN` — fallback, если `ACUNETIX_API_KEY` не задан.
-- `ACU_BASE_URL` — fallback, если `ACUNETIX_BASE_URL` не задан.
-
 Дополнительные переменные, которые используются кодом/health workflow:
 
 - `HEALTH_ALERT_WEBHOOK` — необязательный webhook для алертов health-check.
@@ -43,9 +37,7 @@
 Чтобы исключить двусмысленность, единый стандарт для API-ключа: **`ACUNETIX_API_KEY`**.
 
 - Основные переменные: `ACUNETIX_BASE_URL`, `ACUNETIX_API_KEY`.
-- На переходный период сохранена обратная совместимость: если `ACUNETIX_API_KEY` пустой, workflow/скрипты читают legacy-ключ `ACU_API_TOKEN`.
-- В `WF_D_PT_AcunetixScan` и `WF_D_ProductScan` добавлена ранняя валидация: при пустом токене stage завершается с диагностикой и **не** отправляет запросы с пустым `X-Auth`.
-- Для base URL также поддерживается legacy-алиас `ACU_BASE_URL`, но рекомендуется использовать только `ACUNETIX_BASE_URL`.
+- В `WF_D_PT_AcunetixScan` и `WF_D_ProductScan` добавлена ранняя валидация: при пустом API-ключе stage завершается с диагностикой и **не** отправляет запросы с пустым `X-Auth`.
 
 > Рекомендуется загружать этот `.env` в окружение n8n/контейнера n8n, чтобы все workflow и скрипты видели одинаковые значения.
 
@@ -85,9 +77,9 @@ ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://...\",\"api
 
 1. **`Header Auth account`** (используется HTTP Request узлами).
 2. Заголовки для DefectDojo, как минимум API-key заголовок Dojo (например, `Authorization: Token ...`, в зависимости от вашей схемы).
-3. Заголовки для Acunetix, как минимум API-key заголовок Acunetix (например, `X-Auth: ...`).
+3. Для Acunetix в multi-instance режиме отдельные credentials на каждую ноду **не требуются**: workflow подставляют `X-Auth` динамически из `ACUNETIX_INSTANCES_JSON` (`api_key` выбранной ноды).
 
-Если в workflow используются разные HTTP-ноды для Dojo/Acunetix, убедитесь, что каждая нода ссылается на правильный credentials-профиль.
+Если хотите использовать единый Acunetix-сервер без пула, задайте `ACUNETIX_BASE_URL` + `ACUNETIX_API_KEY`; эти значения будут использованы как дефолтная нода `acu-default`.
 
 ## Порядок запуска
 
@@ -224,10 +216,8 @@ PT_STATE_JSON_END
 
 Для распределения scan job между несколькими Acunetix-инстансами используйте переменные:
 
-> Если `ACUNETIX_API_KEY` не задан, fallback идёт на legacy `ACU_API_TOKEN` (временный переходный режим).
-
 - `ACUNETIX_MAX_SCANS_PER_NODE` — глобальный лимит активных сессий на ноду (по умолчанию `5`).
-- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `api_key` (рекомендуется) / `token` (legacy alias), `max_scans_per_node` (optional, per-node override), `scan_limit` (legacy alias), `name` (optional), `weight` (optional, для policy `weighted`).
+- `ACUNETIX_INSTANCES_JSON` — JSON-массив нод с полями `endpoint`, `api_key`, `max_scans_per_node` (optional, per-node override), `name` (optional), `weight` (optional, для policy `weighted`).
 - `ACUNETIX_NODE_SELECTION_POLICY` — фиксирует правило выбора ноды: `least_loaded` (по умолчанию) или `weighted`.
 - `ACUNETIX_STICKY_ASSIGNMENT` — sticky назначение ноды на PT (`true` по умолчанию).
 
@@ -238,7 +228,7 @@ ACUNETIX_MAX_SCANS_PER_NODE=5
 ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://acu-1.local:3443\",\"api_key\":\"token1\",\"max_scans_per_node\":8},{\"name\":\"acu-2\",\"endpoint\":\"https://acu-2.local:3443\",\"api_key\":\"token2\"}]"
 ```
 
-`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Если API-ключ отсутствует (включая пустые/битые `ACUNETIX_INSTANCES_JSON` без `api_key/token`), workflow завершает stage явной ошибкой конфигурации.
+`WF_D_PT_AcunetixScan` делает health-check (`/api/v1/me`) каждой ноды, собирает активные сессии (`/api/v1/scans`), рассчитывает `free_slots = max_scans_per_node - active_sessions` и запускает новые задачи только в доступные слоты. Если API-ключ отсутствует (включая пустые/битые `ACUNETIX_INSTANCES_JSON` без `api_key`), workflow завершает stage явной ошибкой конфигурации.
 
 Политика диспетчеризации:
 
@@ -250,7 +240,7 @@ ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://acu-1.local
 
 `WF_Dojo_Master` пишет policy snapshot в PT-state (`acu_dispatch_policy`) при переводе PT в `acu_running`, а также пробрасывает policy в `queue_wf_d_pt_acunetixscan`/итог плана.
 
-`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_api_key`, legacy alias: `acunetix_token`) на входе и использует её для всех запросов scan/report в рамках конкретного job. В начале stage выполняется явная проверка endpoint/API-key; при пустом токене выполнение останавливается с диагностикой.
+`WF_D_ProductScan` принимает выбранную ноду (`acunetix_endpoint` + `acunetix_api_key`) на входе и использует её для всех запросов scan/report в рамках конкретного job. В начале stage выполняется явная проверка endpoint/API-key; при пустом ключе выполнение останавливается с диагностикой.
 
 ### Явные payload для `executeWorkflow`
 
@@ -259,7 +249,7 @@ ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://acu-1.local
 - `pt_id` — обязательный идентификатор Product Type (дублируется с `product_type_id` для совместимости).
 - `stage` — ожидаемая стадия subworkflow (`subdomains`, `nmap`, `targets`, `acu`).
 - `job_metadata` — служебный объект (`source_workflow`, `queue`, `transition`, `lock_owner`).
-- `selected_acu_node` — выбранная Acunetix-нода (для ACU-ветки; до диспетчеризации `null`, после диспетчеризации содержит `name/endpoint/api_key`, а `token` оставлен как legacy alias).
+- `selected_acu_node` — выбранная Acunetix-нода (для ACU-ветки; до диспетчеризации `null`, после диспетчеризации содержит `name/endpoint/api_key`).
 
 Минимальные схемы:
 
@@ -382,11 +372,9 @@ ACUNETIX_INSTANCES_JSON="[{\"name\":\"acu-1\",\"endpoint\":\"https://acu-1.local
 ### 1. Подготовительный этап (pre-flight)
 
 1. Подготовить файл окружения n8n на основе `.env.example`; убедиться, что заданы обязательные параметры Dojo/Acunetix и лимиты планировщика.
-2. Проверить `ACUNETIX_INSTANCES_JSON`: должны быть описаны обе Acunetix-ноды с корректными `endpoint` и `api_key` (или `token` как legacy-алиас).
+2. Проверить `ACUNETIX_INSTANCES_JSON`: должны быть описаны обе Acunetix-ноды с корректными `endpoint` и `api_key`.
 3. Проверить `ACUNETIX_MAPPING_DB`: путь должен быть persistent и находиться в `/data/...`; процесс n8n должен иметь права записи.
-4. Валидировать credentials в n8n:
-   - DefectDojo (token-based header auth),
-   - Acunetix (`X-Auth`).
+4. Валидировать credentials в n8n для DefectDojo (token-based header auth). Для Acunetix в multi-instance режиме токены берутся из `ACUNETIX_INSTANCES_JSON`.
 5. Импортировать все workflow-файлы из корня репозитория и убедиться, что ссылки `executeWorkflow` указывают на корректные subworkflow IDs.
 
 ### 2. Базовая валидация интеграций

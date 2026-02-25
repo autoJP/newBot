@@ -96,7 +96,7 @@ def normalize_bool(val: Any) -> bool:
 
 
 def normalize_product_name(raw_name: Any) -> str:
-    """Normalize Product.name to host/ip[:port] or legacy scheme://host/ip[:port]."""
+    """Normalize Product.name to host/ip[:port] or scheme://host/ip[:port]."""
     name = str(raw_name or "").strip()
     if not name:
         return ""
@@ -167,7 +167,7 @@ def build_targets_from_products(products: List[Dict[str, Any]]) -> List[Dict[str
     """
     Берём только internet_accessible=true, строим URL для Acunetix и сохраняем связку product_id -> url.
     • основной контракт Product.name: host/ip[:port] без протокола
-    • legacy: если схема уже задана (http/https), сохраняем её после нормализации
+    • если схема уже задана (http/https), сохраняем её после нормализации
     • IP:port -> https://IP:port для TLS-признаков/портов (минимум 8443, 9443), иначе http://IP:port
     • домен -> https://домен (без дубликатов www.)
     """
@@ -446,7 +446,7 @@ def main() -> None:
             node = json.loads(args.acu_node_json)
             if isinstance(node, dict):
                 acu_base_url = acu_base_url or str(node.get("endpoint") or "").strip()
-                acu_api_token = acu_api_token or str(node.get("token") or "").strip()
+                acu_api_token = acu_api_token or str(node.get("api_key") or "").strip()
                 acu_node_name = acu_node_name or str(node.get("name") or "").strip()
         except Exception as e:
             raise RuntimeError(f"invalid --acu-node-json: {e}")
@@ -454,12 +454,10 @@ def main() -> None:
     acu_base_url = (
         acu_base_url
         or (os.environ.get("ACUNETIX_BASE_URL") or "").strip()
-        or (os.environ.get("ACU_BASE_URL") or "").strip()
     )
     acu_api_token = (
         acu_api_token
         or (os.environ.get("ACUNETIX_API_KEY") or "").strip()
-        or (os.environ.get("ACU_API_TOKEN") or "").strip()
     )
 
     if not acu_base_url:
