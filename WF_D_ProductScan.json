@@ -82,7 +82,9 @@
       "parameters": {
         "authentication": "headerAuth",
         "url": "={{ ($env.DOJO_BASE_URL || 'http://localhost:8080/api/v2').replace(/\\/+$/,'') + '/products/' + $json.product_id + '/' }}",
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "id": "p-product",
       "name": "Get Product",
@@ -110,7 +112,9 @@
             }
           ]
         },
-        "options": {}
+        "options": {
+          "allowUnauthorizedCerts": true
+        }
       },
       "id": "p-existing",
       "name": "Check Existing Acunetix Scans",
@@ -119,7 +123,9 @@
       "position": [
         -820,
         220
-      ]
+      ],
+      "notesInFlow": true,
+      "notes": "Intentional: TLS certificate verification is disabled (allowUnauthorizedCerts=true) for internal Acunetix nodes with self-signed certs."
     },
     {
       "parameters": {
@@ -168,6 +174,9 @@
               "value": "={{ $node['Validate Acunetix Node Input'].json.acunetix_api_key || '' }}"
             }
           ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
         }
       },
       "id": "p-start",
@@ -177,7 +186,9 @@
       "position": [
         -280,
         120
-      ]
+      ],
+      "notesInFlow": true,
+      "notes": "Intentional: TLS certificate verification is disabled (allowUnauthorizedCerts=true) for internal Acunetix nodes with self-signed certs."
     },
     {
       "parameters": {
@@ -233,6 +244,9 @@
               "value": "={{ $node['Validate Acunetix Node Input'].json.acunetix_api_key || '' }}"
             }
           ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
         }
       },
       "id": "p-status",
@@ -242,7 +256,9 @@
       "position": [
         120,
         120
-      ]
+      ],
+      "notesInFlow": true,
+      "notes": "Intentional: TLS certificate verification is disabled (allowUnauthorizedCerts=true) for internal Acunetix nodes with self-signed certs."
     },
     {
       "parameters": {
@@ -323,6 +339,9 @@
               "value": "={{ $node['Validate Acunetix Node Input'].json.acunetix_api_key || '' }}"
             }
           ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
         }
       },
       "id": "p-report",
@@ -332,7 +351,9 @@
       "position": [
         740,
         120
-      ]
+      ],
+      "notesInFlow": true,
+      "notes": "Intentional: TLS certificate verification is disabled (allowUnauthorizedCerts=true) for internal Acunetix nodes with self-signed certs."
     },
     {
       "parameters": {
@@ -383,6 +404,9 @@
               "value": "={{ $node['Finalize Scan Payload Contract'].json.acunetix_api_key || '' }}"
             }
           ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
         }
       },
       "id": "p-export",
@@ -392,7 +416,9 @@
       "position": [
         960,
         120
-      ]
+      ],
+      "notesInFlow": true,
+      "notes": "Intentional: TLS certificate verification is disabled (allowUnauthorizedCerts=true) for internal Acunetix nodes with self-signed certs."
     },
     {
       "parameters": {
@@ -434,6 +460,9 @@
               "value": "true"
             }
           ]
+        },
+        "options": {
+          "allowUnauthorizedCerts": true
         }
       },
       "id": "p-import",
