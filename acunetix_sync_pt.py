@@ -94,7 +94,7 @@ def normalize_bool(val: Any) -> bool:
 
 
 def normalize_product_name(raw_name: Any) -> str:
-    """Normalize Product.name to host/ip[:port] without protocol/path."""
+    """Normalize Product.name to host/ip[:port] or legacy scheme://host/ip[:port]."""
     name = str(raw_name or "").strip()
     if not name:
         return ""
@@ -102,12 +102,13 @@ def normalize_product_name(raw_name: Any) -> str:
     lowered = name.lower()
     if lowered.startswith("http://") or lowered.startswith("https://"):
         parsed = urlsplit(name)
+        scheme = parsed.scheme.lower()
         host = (parsed.hostname or "").strip().lower()
         if not host:
             return ""
         if parsed.port:
-            return f"{host}:{parsed.port}"
-        return host
+            return f"{scheme}://{host}:{parsed.port}"
+        return f"{scheme}://{host}"
 
     base = name.split("/", 1)[0].strip()
     if "@" in base:
@@ -116,10 +117,19 @@ def normalize_product_name(raw_name: Any) -> str:
 
 
 def product_name_to_target_url(name: str) -> str:
-    """Build Acunetix target URL from normalized Product.name (no protocol)."""
+    """Build Acunetix target URL from normalized Product.name."""
     value = (name or "").strip().lower()
     if not value:
         return ""
+
+    if value.startswith("http://") or value.startswith("https://"):
+        parsed = urlsplit(value)
+        host = (parsed.hostname or "").strip().lower()
+        if not host:
+            return ""
+        if parsed.port:
+            return f"{parsed.scheme}://{host}:{parsed.port}"
+        return f"{parsed.scheme}://{host}"
 
     host_for_ip = value
     if value.startswith("[") and "]" in value:
@@ -129,8 +139,24 @@ def product_name_to_target_url(name: str) -> str:
         if port_part.isdigit():
             host_for_ip = host_part
 
-    if looks_like_ip(host_for_ip) and ":" in value and " " not in value:
-        return f"http://{value}"
+    has_port = ":" in value and " " not in value
+    if looks_like_ip(host_for_ip) and has_port:
+        if value.startswith("[") and "]" in value and value[value.find("]") + 1:value.find("]") + 2] != ":":
+            has_port = False
+
+    if looks_like_ip(host_for_ip) and has_port:
+        port = None
+        if value.startswith("[") and "]" in value:
+            suffix = value[value.find("]") + 1:]
+            if suffix.startswith(":") and suffix[1:].isdigit():
+                port = int(suffix[1:])
+        elif value.count(":") == 1:
+            _, port_part = value.split(":", 1)
+            if port_part.isdigit():
+                port = int(port_part)
+
+        scheme = "https" if port in (8443, 9443) else "http"
+        return f"{scheme}://{value}"
 
     bare = value[4:] if value.startswith("www.") else value
     return f"https://{bare}"
@@ -138,9 +164,9 @@ def product_name_to_target_url(name: str) -> str:
 def build_targets_from_products(products: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     Берём только internet_accessible=true, строим URL для Acunetix и сохраняем связку product_id -> url.
-    • ожидается единый контракт Product.name: host/ip[:port] без протокола
-    • для совместимости старые http/https значения нормализуются к host/ip[:port]
-    • IP:port -> http://IP:port
+    • основной контракт Product.name: host/ip[:port] без протокола
+    • legacy: если схема уже задана (http/https), сохраняем её после нормализации
+    • IP:port -> https://IP:port для TLS-признаков/портов (минимум 8443, 9443), иначе http://IP:port
     • домен -> https://домен (без дубликатов www.)
     """
     seen = set()
