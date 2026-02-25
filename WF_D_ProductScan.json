@@ -116,7 +116,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "existing = $json.get('scans', []) or []\n\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{'json': {\n            'skip': True,\n            'reason': 'scan already active',\n            'scan_id': s.get('scan_id'),\n        }}]\n\nreturn [{'json': {\n    'skip': False,\n}}]"
+        "pythonCode": "current_item = _input.first()\ncurrent = current_item.json if current_item and isinstance(current_item.json, dict) else {}\nexisting = current.get('scans', []) or []\n\nfor s in existing:\n    status = (s.get('current_session') or {}).get('status', '')\n    if status in ['processing', 'scheduled', 'queued', 'starting']:\n        return [{'json': {\n            'skip': True,\n            'reason': 'scan already active',\n            'scan_id': s.get('scan_id'),\n        }}]\n\nreturn [{'json': {\n    'skip': False,\n}}]"
       },
       "id": "p-gate",
       "name": "Duplicate Guard (Python)",
@@ -239,7 +239,7 @@
     {
       "parameters": {
         "language": "python",
-        "pythonCode": "import time\ns = ($json.get('current_session') or {})\nstatus = s.get('status', '')\nfinished = status in ['completed', 'failed', 'aborted']\npoll_count = len(_(\"Get Scan Status\").all())\ninit = _(\"Init Poll Context\").first().json if len(_(\"Init Poll Context\").all()) else {}\nstarted_at_epoch = int(init.get('started_at_epoch', int(time.time())))\nmax_poll_count = int(init.get('max_poll_count', 40))\ntimed_out = (not finished) and poll_count >= max_poll_count\nreturn [{ 'json': { 'status': status, 'finished': finished, 'timed_out': timed_out, 'poll_count': poll_count, 'max_poll_count': max_poll_count, 'started_at_epoch': started_at_epoch } }]"
+        "pythonCode": "import time\ncurrent_item = _input.first()\ncurrent = current_item.json if current_item and isinstance(current_item.json, dict) else {}\ns = (current.get('current_session') or {})\nstatus = s.get('status', '')\nfinished = status in ['completed', 'failed', 'aborted']\npoll_count = len(_(\"Get Scan Status\").all())\ninit_item = _(\"Init Poll Context\").first()\ninit = init_item.json if init_item and isinstance(init_item.json, dict) else {}\nstarted_at_epoch = int(init.get('started_at_epoch', int(time.time())))\nmax_poll_count = int(init.get('max_poll_count', 40))\ntimed_out = (not finished) and poll_count >= max_poll_count\nreturn [{ 'json': { 'status': status, 'finished': finished, 'timed_out': timed_out, 'poll_count': poll_count, 'max_poll_count': max_poll_count, 'started_at_epoch': started_at_epoch } }]"
       },
       "id": "p-check",
       "name": "Check Finished (Python)",
